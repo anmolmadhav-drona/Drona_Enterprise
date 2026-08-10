@@ -1,0 +1,230 @@
+// Drona Enterprises - Multi-Tenant Profitability Management System
+// Prisma schema based on the ER diagram from the design spec.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// AUTH & TENANCY
+// ============================================================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  // GROUP_ADMIN | COMPANY_ADMIN | STANDARD_USER
+  role         String   @default("STANDARD_USER")
+  // null = belongs to parent group (Drona Enterprises)
+  companyId    String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company      Company? @relation(fields: [companyId], references: [id])
+  sessions     Session[]
+}
+
+model Company {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  // PARENT | TENANT
+  type        String   @default("TENANT")
+  parentId    String?
+  status      String   @default("ACTIVE") // ACTIVE | INACTIVE
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent      Company?  @relation("CompanyHierarchy", fields: [parentId], references: [id])
+  children    Company[] @relation("CompanyHierarchy")
+  users       User[]
+  clients     Client[]
+  employees   Employee[]
+  expenses    Expense[]
+  categories  ExpenseCategory[]
+}
+
+// ============================================================
+// REFERENCE / MASTER DATA
+// ============================================================
+
+model ClientType {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  // e.g. Enterprise, SMB, Strategic, Retail
+  createdAt DateTime @default(now())
+
+  clients   Client[]
+}
+
+model Location {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  country   String?
+  createdAt DateTime @default(now())
+
+  clients   Client[]
+  employees Employee[]
+}
+
+model EmployeeType {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  // e.g. Full-time, Part-time, Contractor
+  createdAt DateTime @default(now())
+
+  employees Employee[]
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  employees Employee[]
+}
+
+// ============================================================
+// BUSINESS MODULES
+// ============================================================
+
+model Client {
+  id           String   @id @default(cuid())
+  companyId    String
+  name         String
+  code         String
+  clientTypeId String
+  locationId   String
+  status       String   @default("ACTIVE") // ACTIVE | INACTIVE
+  contractValue Float?
+  contactName  String?
+  contactEmail String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company      Company     @relation(fields: [companyId], references: [id])
+  clientType   ClientType  @relation(fields: [clientTypeId], references: [id])
+  location     Location    @relation(fields: [locationId], references: [id])
+  revenues     Revenue[]
+  allocations  EmployeeClientAllocation[]
+
+  @@unique([companyId, code])
+}
+
+model Revenue {
+  id           String   @id @default(cuid())
+  clientId     String
+  date         DateTime
+  invoiceNo    String
+  description  String?
+  quantity     Float    @default(1)
+  rate         Float
+  amount       Float
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model Employee {
+  id             String   @id @default(cuid())
+  companyId      String
+  name           String
+  code           String
+  employeeTypeId String
+  departmentId   String
+  locationId     String
+  designation    String?
+  salary         Float    @default(0)
+  status         String   @default("ACTIVE") // ACTIVE | INACTIVE
+  joiningDate    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  company        Company                   @relation(fields: [companyId], references: [id])
+  employeeType   EmployeeType              @relation(fields: [employeeTypeId], references: [id])
+  department     Department                @relation(fields: [departmentId], references: [id])
+  location       Location                  @relation(fields: [locationId], references: [id])
+  costs          EmployeeCost[]
+  allocations    EmployeeClientAllocation[]
+
+  @@unique([companyId, code])
+}
+
+model EmployeeCost {
+  id          String   @id @default(cuid())
+  employeeId  String
+  date        DateTime
+  // SALARY | ALLOWANCE | OVERTIME | BENEFIT | OTHER
+  costType    String
+  amount      Float
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model EmployeeClientAllocation {
+  id                 String   @id @default(cuid())
+  employeeId         String
+  clientId           String
+  allocationPercent  Float
+  startDate          DateTime?
+  endDate            DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  employee           Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  client             Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model ExpenseCategory {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  // OPERATIONAL | ADMINISTRATIVE | CAPITAL
+  type        String   @default("OPERATIONAL")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company   @relation(fields: [companyId], references: [id])
+  expenses    Expense[]
+
+  @@unique([companyId, name])
+}
+
+model Expense {
+  id           String   @id @default(cuid())
+  companyId    String
+  categoryId   String
+  date         DateTime
+  amount       Float
+  description   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company      Company           @relation(fields: [companyId], references: [id])
+  category     ExpenseCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// SESSION (simple non-JWT auth for demo)
+// ============================================================
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

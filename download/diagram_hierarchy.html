@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    @page { size: 1200px 720px; margin: 0; }
+    :root {
+      --page-bg: #ffffff;
+      --parent-bg: #EFF6FF;
+      --parent-border: #93C5FD;
+      --parent-text: #1E3A8A;
+      --tenant1-bg: #F0FDF4;
+      --tenant1-border: #86EFAC;
+      --tenant1-text: #166534;
+      --tenant2-bg: #FFFBEB;
+      --tenant2-border: #FCD34D;
+      --tenant2-text: #92400E;
+      --resource-bg: #F9FAFB;
+      --resource-border: #E5E7EB;
+      --resource-text: #1F2937;
+      --connector: #94A3B8;
+      --label-muted: #6B7280;
+    }
+    html, body {
+      margin: 0; padding: 0;
+      width: 1200px; height: 720px;
+      background: var(--page-bg);
+      font-family: 'Inter', sans-serif;
+      color: var(--resource-text);
+    }
+    .canvas {
+      width: 1200px; height: 720px;
+      position: relative;
+      padding: 36px 50px;
+      box-sizing: border-box;
+    }
+
+    .title-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 12px;
+    }
+    .title-bar .h {
+      font-size: 22px; font-weight: 700;
+      color: #111827; letter-spacing: -0.3px;
+    }
+    .title-bar .sub {
+      font-size: 13px;
+      color: var(--label-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Tree layout: 1 parent on top, 2 tenants below, resources below each */
+    .tree {
+      position: relative;
+      width: 100%;
+      margin-top: 14px;
+    }
+
+    .parent-row {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 32px;
+    }
+    .parent-card {
+      width: 320px;
+      background: var(--parent-bg);
+      border: 1.5px solid var(--parent-border);
+      border-radius: 10px;
+      padding: 14px 22px;
+      text-align: center;
+      position: relative;
+      z-index: 2;
+    }
+    .parent-card .badge {
+      display: inline-block;
+      padding: 1px 8px;
+      background: var(--parent-text);
+      color: #fff;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      border-radius: 3px;
+      margin-bottom: 6px;
+    }
+    .parent-card .name {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--parent-text);
+      letter-spacing: -0.2px;
+    }
+    .parent-card .code {
+      font-size: 11px;
+      color: var(--parent-text);
+      opacity: 0.7;
+      font-family: 'JetBrains Mono', monospace;
+      margin-top: 2px;
+    }
+    .parent-card .stats {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--parent-border);
+    }
+    .parent-card .stats .stat {
+      text-align: center;
+    }
+    .parent-card .stats .v {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--parent-text);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .parent-card .stats .l {
+      font-size: 9px;
+      color: var(--label-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Vertical + horizontal connector */
+    .vline-down {
+      width: 2px;
+      height: 28px;
+      background: var(--connector);
+      margin: 0 auto;
+    }
+    .hline {
+      width: 56%;
+      height: 2px;
+      background: var(--connector);
+      margin: 0 auto;
+      position: relative;
+    }
+    .hline::before, .hline::after {
+      content: '';
+      position: absolute;
+      width: 2px;
+      height: 24px;
+      background: var(--connector);
+      top: 0;
+    }
+    .hline::before { left: 0; }
+    .hline::after { right: 0; }
+
+    .tenants-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 80px;
+      margin-top: 14px;
+    }
+    .tenant-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .tenant-card {
+      border: 1.5px solid;
+      border-radius: 10px;
+      padding: 10px 16px;
+      text-align: center;
+    }
+    .tenant-card.t1 { background: var(--tenant1-bg); border-color: var(--tenant1-border); }
+    .tenant-card.t1 .badge { background: var(--tenant1-text); }
+    .tenant-card.t1 .name, .tenant-card.t1 .code, .tenant-card.t1 .stats .v { color: var(--tenant1-text); }
+    .tenant-card.t2 { background: var(--tenant2-bg); border-color: var(--tenant2-border); }
+    .tenant-card.t2 .badge { background: var(--tenant2-text); }
+    .tenant-card.t2 .name, .tenant-card.t2 .code, .tenant-card.t2 .stats .v { color: var(--tenant2-text); }
+    .tenant-card .badge {
+      display: inline-block;
+      padding: 1px 7px;
+      color: #fff;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      border-radius: 3px;
+      margin-bottom: 4px;
+    }
+    .tenant-card .name {
+      font-size: 15px; font-weight: 700;
+      letter-spacing: -0.2px;
+    }
+    .tenant-card .code {
+      font-size: 10px;
+      opacity: 0.75;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .vline-short {
+      width: 2px;
+      height: 18px;
+      background: var(--connector);
+      margin: 0 auto;
+    }
+
+    .resources-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .resource-pill {
+      background: var(--resource-bg);
+      border: 1px solid var(--resource-border);
+      border-radius: 6px;
+      padding: 6px 8px;
+      text-align: center;
+    }
+    .resource-pill .n {
+      font-size: 18px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--resource-text);
+      line-height: 1;
+    }
+    .resource-pill .l {
+      font-size: 8.5px;
+      color: var(--label-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+
+    .legend {
+      margin-top: 14px;
+      display: flex;
+      gap: 18px;
+      justify-content: center;
+      font-size: 10px;
+      color: var(--label-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .legend .item { display: flex; align-items: center; gap: 6px; }
+    .legend .swatch {
+      width: 12px; height: 12px;
+      border-radius: 2px;
+      border: 1px solid;
+    }
+    .legend .swatch.parent { background: var(--parent-bg); border-color: var(--parent-border); }
+    .legend .swatch.t1 { background: var(--tenant1-bg); border-color: var(--tenant1-border); }
+    .legend .swatch.t2 { background: var(--tenant2-bg); border-color: var(--tenant2-border); }
+    .legend .swatch.r { background: var(--resource-bg); border-color: var(--resource-border); }
+
+    .caption {
+      font-size: 11px;
+      color: var(--label-muted);
+      margin-top: 10px;
+      text-align: center;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="title-bar">
+      <div class="h">Multi-Tenant Hierarchy &mdash; Drona Profitability Suite</div>
+      <div class="sub">Parent + 2 Tenants &middot; Shared Schema &middot; Isolated Rows</div>
+    </div>
+
+    <div class="tree">
+      <!-- Parent -->
+      <div class="parent-row">
+        <div class="parent-card">
+          <div class="badge">PARENT</div>
+          <div class="name">Drona Enterprises</div>
+          <div class="code">DRONA-ENT</div>
+          <div class="stats">
+            <div class="stat"><div class="v">2</div><div class="l">Tenants</div></div>
+            <div class="stat"><div class="v">5</div><div class="l">Users</div></div>
+            <div class="stat"><div class="v">3</div><div class="l">Roles</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vertical connector + horizontal rail -->
+      <div class="vline-down"></div>
+      <div class="hline"></div>
+
+      <!-- Tenants -->
+      <div class="tenants-row">
+        <div class="tenant-col">
+          <div class="tenant-card t1">
+            <div class="badge">TENANT</div>
+            <div class="name">Drona Logitech</div>
+            <div class="code">DRONA-LOG</div>
+          </div>
+          <div class="vline-short"></div>
+          <div class="resources-grid">
+            <div class="resource-pill"><div class="n">4</div><div class="l">Clients</div></div>
+            <div class="resource-pill"><div class="n">5</div><div class="l">Employees</div></div>
+            <div class="resource-pill"><div class="n">2</div><div class="l">Users</div></div>
+            <div class="resource-pill"><div class="n">24</div><div class="l">Revenue</div></div>
+            <div class="resource-pill"><div class="n">90</div><div class="l">Emp Cost</div></div>
+            <div class="resource-pill"><div class="n">14</div><div class="l">Allocations</div></div>
+          </div>
+        </div>
+
+        <div class="tenant-col">
+          <div class="tenant-card t2">
+            <div class="badge">TENANT</div>
+            <div class="name">Drona Valuechain</div>
+            <div class="code">DRONA-VAL</div>
+          </div>
+          <div class="vline-short"></div>
+          <div class="resources-grid">
+            <div class="resource-pill"><div class="n">3</div><div class="l">Clients</div></div>
+            <div class="resource-pill"><div class="n">4</div><div class="l">Employees</div></div>
+            <div class="resource-pill"><div class="n">2</div><div class="l">Users</div></div>
+            <div class="resource-pill"><div class="n">18</div><div class="l">Revenue</div></div>
+            <div class="resource-pill"><div class="n">72</div><div class="l">Emp Cost</div></div>
+            <div class="resource-pill"><div class="n">5</div><div class="l">Allocations</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="item"><span class="swatch parent"></span> Parent company</div>
+      <div class="item"><span class="swatch t1"></span> Tenant (Logitech)</div>
+      <div class="item"><span class="swatch t2"></span> Tenant (Valuechain)</div>
+      <div class="item"><span class="swatch r"></span> Tenant-scoped resources</div>
+    </div>
+
+    <div class="caption">Figure 2. Multi-tenant hierarchy: a single Parent (Drona Enterprises) controls N Tenant companies. Each tenant owns its own Clients, Employees, Revenue, EmployeeCost, Allocations, Expenses, and Users. Data isolation is enforced at the API layer via <code>companyId IN accessibleIds</code> on every Prisma query.</div>
+
+  </div>
+</body>
+</html>

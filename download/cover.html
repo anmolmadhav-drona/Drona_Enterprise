@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    @page { size: 794px 1123px; margin: 0; }
+    :root {
+      --page-bg: #f2f2f1;
+      --section-bg: #eeeeed;
+      --card-bg: #ebeae8;
+      --header-fill: #746c55;
+      --cover-block: #7e7457;
+      --border: #bdb8a9;
+      --icon: #867237;
+      --accent: #8c7325;
+      --accent-secondary: #62a7be;
+      --text-primary: #21211e;
+      --text-muted: #88867f;
+    }
+    html, body {
+      margin: 0; padding: 0;
+      width: 794px; height: 1123px;
+      background: var(--page-bg);
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
+    }
+    @media screen {
+      html { height: auto; display: flex; justify-content: center; min-height: 100vh; background: #d8d8d6; }
+      body { transform-origin: top center; scale: min(1, calc(100vw / 794), calc(100vh / 1123)); margin: 0 auto; box-shadow: 0 0 60px rgba(0,0,0,0.2); }
+    }
+    .cover {
+      width: 794px; height: 1123px;
+      position: relative;
+      box-sizing: border-box;
+      background: var(--page-bg);
+    }
+
+    /* ── Layer 1: Background grid + watermark (overflow clipped) ── */
+    .layer-bg {
+      position: absolute; inset: 0;
+      overflow: hidden;
+      z-index: 1;
+      background-image:
+        linear-gradient(to right, rgba(140, 115, 37, 0.045) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(140, 115, 37, 0.045) 1px, transparent 1px);
+      background-size: 50px 50px;
+    }
+    .watermark {
+      position: absolute;
+      right: 0; bottom: -60px;
+      font-family: 'Playfair Display', serif;
+      font-size: 460pt; font-weight: 900;
+      color: var(--accent);
+      opacity: 0.045;
+      line-height: 0.8;
+      letter-spacing: -10px;
+      user-select: none;
+    }
+
+    /* ── Layer 2: Structure (vertical anchor line) ── */
+    .layer-struct {
+      position: absolute; inset: 0;
+      z-index: 2;
+    }
+    .vline {
+      position: absolute;
+      left: 95px;
+      top: 112px;
+      bottom: 112px;
+      width: 6px;
+      background: var(--accent);
+    }
+    .top-mark {
+      position: absolute;
+      left: 95px;
+      top: 112px;
+      width: 36px; height: 6px;
+      background: var(--header-fill);
+    }
+    .bottom-mark {
+      position: absolute;
+      left: 95px;
+      bottom: 112px;
+      width: 36px; height: 6px;
+      background: var(--header-fill);
+    }
+
+    /* ── Layer 3: Content ── */
+    .layer-content {
+      position: absolute; inset: 0;
+      z-index: 3;
+    }
+
+    /* Content left edge = vline (101) + gap 49px = 150px (≥ 40px gap requirement) */
+    .content-col {
+      position: absolute;
+      left: 150px;
+      right: 80px;
+      top: 0; bottom: 0;
+    }
+
+    /* A — Kicker (Y = 168 = 0.15 * H) */
+    .kicker {
+      position: absolute;
+      top: 168px; left: 0;
+      font-size: 11pt;
+      font-weight: 500;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .kicker .dot {
+      display: inline-block;
+      width: 5px; height: 5px;
+      background: var(--accent);
+      border-radius: 50%;
+      margin: 0 10px 2px 0;
+      vertical-align: middle;
+    }
+
+    /* B — Hero Title (Y = 248 = 0.22 * H) */
+    .hero-title {
+      position: absolute;
+      top: 248px; left: 0;
+      font-family: 'Playfair Display', serif;
+      font-size: 46pt;
+      font-weight: 900;
+      line-height: 1.15;
+      color: var(--text-primary);
+      max-width: 540px;
+      letter-spacing: -0.5px;
+    }
+    .hero-title .line2 {
+      display: block;
+      color: var(--accent);
+      margin-top: 4px;
+    }
+
+    /* Subtitle (Y = 470) — gap from hero-title bottom (~440) */
+    .subtitle {
+      position: absolute;
+      top: 478px; left: 0;
+      font-size: 18pt;
+      font-weight: 400;
+      line-height: 1.35;
+      color: var(--text-primary);
+      max-width: 540px;
+      letter-spacing: 0.4px;
+    }
+
+    /* C — Summary block (Y = 600) */
+    .summary {
+      position: absolute;
+      top: 612px; left: 0;
+      font-size: 11.5pt;
+      font-weight: 400;
+      line-height: 1.65;
+      color: var(--text-muted);
+      max-width: 470px;
+    }
+
+    /* Tags row (Y = 760) */
+    .tags {
+      position: absolute;
+      top: 770px; left: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 10px;
+      max-width: 540px;
+    }
+    .tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8.5pt;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: var(--text-primary);
+      border-radius: 2px;
+    }
+
+    /* D — Meta block (Y = 870) */
+    .meta {
+      position: absolute;
+      top: 880px; left: 0;
+      display: flex;
+      gap: 50px;
+    }
+    .meta .field {
+      display: flex; flex-direction: column;
+    }
+    .meta .label {
+      font-size: 8.5pt;
+      font-weight: 500;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .meta .value {
+      font-size: 14pt;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: 0.3px;
+    }
+
+    /* Footer strip */
+    .footer {
+      position: absolute;
+      left: 150px; right: 80px;
+      bottom: 76px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 8.5pt;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .footer .id {
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 1px;
+    }
+  </style>
+</head>
+<body>
+  <div class="cover">
+    <!-- Layer 1: Background grid + watermark -->
+    <div class="layer-bg">
+      <div class="watermark">D</div>
+    </div>
+
+    <!-- Layer 2: Structural anchor line -->
+    <div class="layer-struct">
+      <div class="vline"></div>
+      <div class="top-mark"></div>
+      <div class="bottom-mark"></div>
+    </div>
+
+    <!-- Layer 3: Content -->
+    <div class="layer-content">
+      <div class="content-col">
+        <div class="kicker">
+          <span class="dot"></span>Technical Architecture &amp; Implementation Report
+        </div>
+
+        <div class="hero-title">
+          Drona Enterprises<br>
+          Profitability Suite
+        </div>
+
+        <div class="subtitle">
+          Multi-Tenant SaaS for Financial &amp; Profitability Management
+        </div>
+
+        <div class="summary">
+          This report documents the architecture, business modules, data model, API
+          surface, and tenant-isolation guarantees of the Drona Profitability Suite.
+          It covers the Next.js 16 application, Prisma schema, profitability
+          calculation engine, role-based access control, and per-client cost
+          allocation that powers the group consolidated KPIs.
+        </div>
+
+        <div class="tags">
+          <span class="tag">Multi-Tenant SaaS</span>
+          <span class="tag">Profitability Analytics</span>
+          <span class="tag">Next.js 16</span>
+          <span class="tag">Prisma</span>
+          <span class="tag">TypeScript</span>
+        </div>
+
+        <div class="meta">
+          <div class="field">
+            <span class="label">Prepared By</span>
+            <span class="value">Z.ai Engineering</span>
+          </div>
+          <div class="field">
+            <span class="label">Date</span>
+            <span class="value">August 2025</span>
+          </div>
+          <div class="field">
+            <span class="label">Version</span>
+            <span class="value">v1.0</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <span>Drona Suite &middot; Profitability v1.0</span>
+        <span class="id">DOC-DRN-TR-001</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
