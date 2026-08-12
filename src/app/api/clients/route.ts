@@ -54,6 +54,8 @@ export async function POST(req: NextRequest) {
     contractValue,
     contactName,
     contactEmail,
+    contactPhone,
+    customFields,
   } = body
 
   if (!name || !code || !clientTypeId || !locationId) {
@@ -75,8 +77,19 @@ export async function POST(req: NextRequest) {
       contractValue: contractValue ? Number(contractValue) : null,
       contactName,
       contactEmail,
+      contactPhone,
+      customFields: customFields
+        ? typeof customFields === 'string'
+          ? customFields
+          : JSON.stringify(customFields)
+        : null,
     },
-    include: { company: true, clientType: true, location: true },
+    include: {
+      company: { select: { id: true, name: true, code: true } },
+      clientType: true,
+      location: true,
+      _count: { select: { revenues: true, allocations: true } },
+    },
   })
   return NextResponse.json({ client: created }, { status: 201 })
 }

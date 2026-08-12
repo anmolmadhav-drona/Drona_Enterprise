@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     orderBy: [{ type: 'desc' }, { name: 'asc' }],
   })
 
-  const rows = []
+  const rows: any[] = []
   for (const c of companies) {
     const revenue = await db.revenue.aggregate({
       _sum: { amount: true },

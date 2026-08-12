@@ -106,6 +106,8 @@ model Client {
   contractValue Float?
   contactName  String?
   contactEmail String?
+  contactPhone String?
+  customFields String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -114,8 +116,22 @@ model Client {
   location     Location    @relation(fields: [locationId], references: [id])
   revenues     Revenue[]
   allocations  EmployeeClientAllocation[]
+  documents    ClientDocument[]
 
   @@unique([companyId, code])
+}
+
+model ClientDocument {
+  id        String   @id @default(cuid())
+  clientId  String
+  name      String
+  category  String   @default("Invoice") // Invoice | Contract | Image | Document | Receipt | Other
+  fileUrl   String   // base64 or relative URL
+  fileType  String   // e.g. image/jpeg, image/png, application/pdf
+  fileSize  Int?     // bytes
+  createdAt DateTime @default(now())
+
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
 }
 
 model Revenue {
@@ -126,7 +142,12 @@ model Revenue {
   description  String?
   quantity     Float    @default(1)
   rate         Float
-  amount       Float
+  amount       Float    // Grand Total (including GST)
+  items        String?  // JSON stringified array of line items [{ name, quantity, rate, gstPercent, amount }]
+  subtotal     Float?   // Total before tax
+  taxAmount    Float?   // Total tax / GST amount
+  documentUrl  String?
+  documentName String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -145,6 +166,9 @@ model Employee {
   salary         Float    @default(0)
   status         String   @default("ACTIVE") // ACTIVE | INACTIVE
   joiningDate    DateTime?
+  email          String?
+  phone          String?
+  customFields   String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -208,6 +232,8 @@ model Expense {
   date         DateTime
   amount       Float
   description   String?
+  documentUrl  String?
+  documentName String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

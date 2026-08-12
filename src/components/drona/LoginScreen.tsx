@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Building2, Lock, Mail, Loader2, ShieldCheck, Users, ChevronRight } from 'lucide-react'
+import { Lock, Mail, Loader2, ShieldCheck, ChevronRight } from 'lucide-react'
 import { useApp } from '@/lib/app-store'
 import { fetchJson } from '@/lib/app-store'
 import { Button } from '@/components/ui/button'
@@ -9,12 +9,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
+import { DronaLogo } from './branding/DronaLogo'
 
 const DEMO_ACCOUNTS = [
-  { label: 'Group Admin', email: 'group.admin@drona.com', password: 'admin123', role: 'Drona Enterprises', tone: 'violet' },
-  { label: 'Logitech Admin', email: 'logitech.admin@drona.com', password: 'admin123', role: 'Drona Logitech', tone: 'blue' },
-  { label: 'Valuechain Admin', email: 'valuechain.admin@drona.com', password: 'admin123', role: 'Drona Valuechain', tone: 'green' },
-  { label: 'Standard User', email: 'user.logitech@drona.com', password: 'user123', role: 'Tenant user', tone: 'amber' },
+  { label: 'Group Admin', email: 'group.admin@drona.com', password: 'admin123', role: 'Drona Enterprises (All Companies)', badge: 'bg-[#0B2148] text-white' },
+  { label: 'Company Admin', email: 'logitech.admin@drona.com', password: 'admin123', role: 'Drona Logitech', badge: 'bg-[#08B6D8]/15 text-[#0B2148]' },
+  { label: 'Company Admin', email: 'valuechain.admin@drona.com', password: 'admin123', role: 'Drona Valuechain', badge: 'bg-[#08B6D8]/15 text-[#0B2148]' },
+  { label: 'Standard User', email: 'user.logitech@drona.com', password: 'user123', role: 'Logitech (View-only)', badge: 'bg-slate-100 text-slate-700' },
 ]
 
 export function LoginScreen() {
@@ -46,123 +47,116 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="min-h-screen w-full flex flex-col lg:flex-row bg-gradient-to-br from-primary/95 via-primary to-primary/90">
-      {/* Left: Brand + diagram-style architecture preview */}
-      <div className="flex-1 p-8 lg:p-14 text-primary-foreground flex flex-col justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-11 w-11 rounded-xl bg-primary-foreground/15 backdrop-blur flex items-center justify-center ring-1 ring-white/20">
-            <Building2 className="h-6 w-6" />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight">Drona Enterprises</h1>
-            <p className="text-xs text-primary-foreground/70">Profitability Management Suite</p>
-          </div>
+    <div className="h-screen w-full flex flex-col lg:flex-row bg-[#0B2148] relative overflow-hidden font-sans text-slate-100">
+      {/* Left Column: Full Hero Video (Plays once on load, no loop) */}
+      <div className="flex-1 relative z-10 h-full overflow-hidden bg-[#0B2148] flex flex-col justify-between p-6 lg:p-10">
+        {/* Floating Top Brand Logo */}
+        <div className="relative z-20">
+          <DronaLogo variant="dark" />
         </div>
 
-        <div className="my-8 lg:my-0 max-w-md">
-          <h2 className="text-3xl lg:text-4xl font-bold leading-tight tracking-tight">
-            Track revenue, cost & profit across every company.
-          </h2>
-          <p className="mt-3 text-primary-foreground/80 text-sm lg:text-base">
-            A multi-tenant ERP that isolates data per company while letting Group admins compare
-            performance and drill into per-client profitability.
-          </p>
-
-          {/* Mini architecture sketch */}
-          <div className="mt-7 grid grid-cols-3 gap-3 text-xs">
-            <div className="rounded-lg bg-white/10 ring-1 ring-white/15 p-3">
-              <Users className="h-4 w-4 mb-1.5" />
-              <div className="font-semibold">Parent</div>
-              <div className="text-primary-foreground/70">Drona Enterprises</div>
-            </div>
-            <div className="rounded-lg bg-white/10 ring-1 ring-white/15 p-3">
-              <Building2 className="h-4 w-4 mb-1.5" />
-              <div className="font-semibold">Tenant A</div>
-              <div className="text-primary-foreground/70">Drona Logitech</div>
-            </div>
-            <div className="rounded-lg bg-white/10 ring-1 ring-white/15 p-3">
-              <Building2 className="h-4 w-4 mb-1.5" />
-              <div className="font-semibold">Tenant B</div>
-              <div className="text-primary-foreground/70">Drona Valuechain</div>
-            </div>
-          </div>
+        {/* Hero Image Container */}
+        <div className="absolute inset-0 z-10 w-full h-full flex items-center justify-center bg-[#0B2148]">
+          <img
+            src="/brand/hero_image.gif"
+            alt="Drona Enterprises Hero"
+            className="w-full h-full object-cover"
+          />
         </div>
 
-        <div className="text-[11px] text-primary-foreground/60">
-          Multi-tenant · Role-based access · Isolated databases · Shared codebase
+        {/* Bottom subtle copyright overlay */}
+        <div className="relative z-20 text-[11px] text-white/80 font-medium drop-shadow-md">
+          © {new Date().getFullYear()} Drona Enterprises. Multi-Tenant Enterprise Suite.
         </div>
       </div>
 
-      {/* Right: Login card */}
-      <div className="flex-1 lg:flex-none lg:w-[480px] bg-background flex items-center justify-center p-6 lg:p-10">
+      {/* Right Column: Secure Authentication Form */}
+      <div className="flex-1 lg:flex-none lg:w-[460px] bg-[#F8FBFD] text-slate-900 flex items-center justify-center p-4 lg:p-8 relative z-20 border-l border-white/10 shadow-2xl h-full overflow-y-auto lg:overflow-hidden">
         <div className="w-full max-w-sm">
-          <Card className="border-0 shadow-xl">
-            <CardHeader className="space-y-1 pb-2">
-              <div className="flex items-center gap-2 text-primary">
-                <ShieldCheck className="h-5 w-5" />
-                <span className="text-xs font-semibold uppercase tracking-wide">Secure Sign In</span>
+          <Card className="border border-slate-200/80 shadow-2xl bg-white rounded-2xl overflow-hidden">
+            <CardHeader className="space-y-1 pb-2 pt-4 px-5 bg-slate-50/50 border-b border-slate-100">
+              <div className="flex items-center gap-1.5 text-[#0B2148]">
+                <ShieldCheck className="h-4 w-4 text-[#08B6D8]" />
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#0B2148]">Secure Workspace Access</span>
               </div>
-              <CardTitle className="text-2xl">Welcome back</CardTitle>
-              <CardDescription className="text-muted-foreground">
-                Enter your credentials to access your tenant.
+              <CardTitle className="text-xl font-bold text-[#0B2148] tracking-tight">Welcome back</CardTitle>
+              <CardDescription className="text-slate-500 text-[11px]">
+                Enter your credentials to access your Drona workspace.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="email" className="text-xs font-medium">Email</Label>
+
+            <CardContent className="p-5">
+              <form onSubmit={handleSubmit} className="space-y-3">
+                <div className="space-y-1">
+                  <Label htmlFor="email" className="text-[11px] font-semibold text-slate-700">Email Address</Label>
                   <div className="relative">
-                    <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                     <Input
                       id="email"
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="pl-9"
+                      className="pl-8 h-9 border-slate-200 focus:border-[#08B6D8] focus:ring-2 focus:ring-[#08B6D8]/20 rounded-lg text-xs"
+                      placeholder="name@drona.com"
                       autoComplete="username"
                       required
                     />
                   </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="password" className="text-xs font-medium">Password</Label>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password" className="text-[11px] font-semibold text-slate-700">Password</Label>
+                    <span className="text-[10px] text-[#08B6D8] font-medium cursor-pointer hover:underline">Forgot password?</span>
+                  </div>
                   <div className="relative">
-                    <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                     <Input
                       id="password"
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-9"
+                      className="pl-8 h-9 border-slate-200 focus:border-[#08B6D8] focus:ring-2 focus:ring-[#08B6D8]/20 rounded-lg text-xs"
+                      placeholder="••••••••"
                       autoComplete="current-password"
                       required
                     />
                   </div>
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  {loading ? 'Signing in…' : 'Sign In'}
+
+                <Button
+                  type="submit"
+                  className="w-full h-9 bg-[#0B2148] hover:bg-[#102B63] text-white font-semibold text-xs rounded-lg shadow-md transition-all duration-200 flex items-center justify-center gap-2 mt-1"
+                  disabled={loading}
+                >
+                  {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#08B6D8]" /> : null}
+                  {loading ? 'Authenticating…' : 'Sign In to Workspace'}
                 </Button>
               </form>
 
-              <div className="mt-6 pt-4 border-t">
-                <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-2">
-                  Quick demo logins
+              {/* Demo Accounts Panel */}
+              <div className="mt-4 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Quick Demo Accounts</span>
+                  <span className="text-[9px] text-slate-400">Click to fill</span>
                 </div>
+
                 <div className="space-y-1.5">
                   {DEMO_ACCOUNTS.map((acc) => (
                     <button
                       key={acc.email}
                       type="button"
                       onClick={() => quickLogin(acc)}
-                      className="w-full flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs hover:bg-accent/70 transition group"
+                      className="w-full flex items-center justify-between p-2 rounded-lg border border-slate-100 bg-slate-50/60 hover:bg-[#E8F8FC]/50 hover:border-[#08B6D8]/40 transition text-left group"
                     >
-                      <span className="flex items-center gap-2">
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
-                        <span className="font-medium">{acc.label}</span>
-                        <span className="text-muted-foreground">· {acc.role}</span>
-                      </span>
-                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:translate-x-0.5 transition" />
+                      <div className="min-w-0 pr-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-[11px] text-[#0B2148] truncate">{acc.label}</span>
+                          <span className={`text-[9px] font-semibold px-1.5 py-0.2 rounded ${acc.badge}`}>{acc.role}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 truncate mt-0.5">{acc.email}</div>
+                      </div>
+                      <ChevronRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-[#08B6D8] group-hover:translate-x-0.5 transition shrink-0" />
                     </button>
                   ))}
                 </div>

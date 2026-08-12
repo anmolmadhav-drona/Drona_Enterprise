@@ -21,6 +21,7 @@ export type ModuleKey =
   | 'allocations'
   | 'expenses'
   | 'reports'
+  | 'import'
 
 type State = {
   user: AppUser | null

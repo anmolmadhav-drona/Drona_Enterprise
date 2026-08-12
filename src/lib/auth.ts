@@ -18,6 +18,11 @@ export type SessionUser = {
   company?: { id: string; name: string; code: string; type: string } | null
 }
 
+export function hashPassword(input: string): string {
+  const reversed = Buffer.from(input).reverse().toString('utf8')
+  return `demo$${reversed}`
+}
+
 function verifyPassword(input: string, hash: string): boolean {
   if (!hash.startsWith('demo$')) return false
   const stored = hash.slice(5)

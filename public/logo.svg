@@ -1,6 +1,47 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="8" fill="#2563EB"/>
-  <path d="M8 24V14L16 8L24 14V24" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M12 24V17H20V24" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M16 11V13" stroke="white" stroke-width="2" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="drona-mark-gradient" x1="10" y1="90" x2="90" y2="10" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0B2148" />
+      <stop offset="45%" stop-color="#102B63" />
+      <stop offset="80%" stop-color="#08B6D8" />
+      <stop offset="100%" stop-color="#16C4E8" />
+    </linearGradient>
+  </defs>
+
+  <!-- Network Connections inside D shape -->
+  <g stroke="url(#drona-mark-gradient)" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Outer D Boundary Mesh -->
+    <path d="M 22 15 L 22 85 L 55 85 C 75 85 88 72 88 50 C 88 28 75 15 55 15 Z" stroke-width="3" fill="none" />
+
+    <!-- Internal Mesh Triangles & Cross-links -->
+    <path d="M 22 15 L 42 35 L 22 50 L 45 65 L 22 85" stroke-width="1.8" opacity="0.85" />
+    <path d="M 42 35 L 62 20 L 55 15" stroke-width="1.8" opacity="0.85" />
+    <path d="M 62 20 L 78 35 L 88 50 L 75 68 L 55 85" stroke-width="1.8" opacity="0.85" />
+    <path d="M 42 35 L 55 50 L 78 35" stroke-width="1.8" opacity="0.85" />
+    <path d="M 22 50 L 55 50 L 45 65 L 65 78 L 55 85" stroke-width="1.8" opacity="0.85" />
+    <path d="M 55 50 L 75 68" stroke-width="1.8" opacity="0.85" />
+
+    <!-- Prominent Upward Growth Chart Trend Line -->
+    <path d="M 26 70 L 42 42 L 55 58 L 78 26" stroke="url(#drona-mark-gradient)" stroke-width="4.5" fill="none" />
+  </g>
+
+  <!-- Network Nodes -->
+  <g fill="#08B6D8">
+    <circle cx="22" cy="15" r="3" fill="#0B2148" />
+    <circle cx="22" cy="50" r="3" fill="#0B2148" />
+    <circle cx="22" cy="85" r="3" fill="#0B2148" />
+    <circle cx="42" cy="35" r="3" fill="#102B63" />
+    <circle cx="62" cy="20" r="3" fill="#08B6D8" />
+    <circle cx="78" cy="35" r="3.5" fill="#16C4E8" />
+    <circle cx="88" cy="50" r="3" fill="#08B6D8" />
+    <circle cx="75" cy="68" r="3" fill="#08B6D8" />
+    <circle cx="55" cy="85" r="3" fill="#102B63" />
+    <circle cx="45" cy="65" r="3" fill="#102B63" />
+    <circle cx="55" cy="50" r="3.5" fill="#08B6D8" />
+    <circle cx="65" cy="78" r="3" fill="#08B6D8" />
+    <circle cx="26" cy="70" r="3.5" fill="#0B2148" />
+    <circle cx="42" cy="42" r="3.5" fill="#102B63" />
+    <circle cx="55" cy="58" r="3.5" fill="#08B6D8" />
+    <circle cx="78" cy="26" r="4" fill="#16C4E8" />
+  </g>
 </svg>

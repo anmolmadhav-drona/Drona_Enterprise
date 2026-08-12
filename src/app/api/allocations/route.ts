@@ -56,6 +56,10 @@ export async function POST(req: NextRequest) {
       startDate: startDate ? new Date(startDate) : null,
       endDate: endDate ? new Date(endDate) : null,
     },
+    include: {
+      employee: { select: { id: true, name: true, code: true, company: { select: { id: true, name: true } } } },
+      client: { select: { id: true, name: true, code: true } },
+    },
   })
   return NextResponse.json({ allocation: created }, { status: 201 })
 }

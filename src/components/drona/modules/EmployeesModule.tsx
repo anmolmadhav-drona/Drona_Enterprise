@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   UsersRound, UserPlus, Building2, MapPin, Filter, BadgeCheck,
-  ShieldAlert, Loader2,
+  ShieldAlert, Loader2, Search, Briefcase, Calendar, Phone, Mail,
+  Layers, Plus, X, Columns3
 } from 'lucide-react'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { toast } from 'sonner'
 
 import { useApp, fetchJson } from '@/lib/app-store'
@@ -20,12 +22,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
 import { LoadingState, EmptyState, ErrorState, PageHeader } from './shared'
-
-// ---- Types -----------------------------------------------------------------
 
 type EmployeeType = { id: string; name: string }
 type Department = { id: string; name: string }
@@ -44,6 +41,9 @@ type Employee = {
   salary: number | null
   status: string
   joiningDate: string | null
+  email?: string | null
+  phone?: string | null
+  customFields?: string | null
   company: { id: string; name: string }
   employeeType: EmployeeType | null
   department: Department | null
@@ -53,54 +53,71 @@ type Employee = {
 
 type StatusFilter = 'all' | 'ACTIVE' | 'INACTIVE'
 
-// ---- Component -------------------------------------------------------------
-
 export function EmployeesModule() {
-  const { user, filterCompanyId, filterLocationId } = useApp()
-
+  const { user } = useApp()
   const [employees, setEmployees] = useState<Employee[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [employeeTypes, setEmployeeTypes] = useState<EmployeeType[]>([])
+  const [locations, setLocations] = useState<LocationItem[]>([])
+  const [companies, setCompanies] = useState<CompanyListItem[]>([])
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
+  const [pageCompanyId, setPageCompanyId] = useState<string | null>(null)
   const [departmentFilter, setDepartmentFilter] = useState<string>('all')
   const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [pageLocationId, setPageLocationId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-
   const [addOpen, setAddOpen] = useState(false)
+
+  // Column Visibility & Custom Column Pill Button State
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({
+    name: true,
+    company: true,
+    department: true,
+    type: true,
+    location: true,
+    designation: true,
+    contact: true,
+    salary: true,
+    allocations: true,
+    status: true,
+  })
+  const [extraCols, setExtraCols] = useState<string[]>([])
+  const [newColHeader, setNewColHeader] = useState('')
 
   const isGroupAdmin = user?.role === 'GROUP_ADMIN'
   const isViewOnly = user?.role === 'STANDARD_USER'
 
-  // Load filter dropdown options once on mount.
   useEffect(() => {
     let active = true
     ;(async () => {
       try {
-        const [d, t] = await Promise.all([
+        const [d, t, l, c] = await Promise.all([
           fetchJson<{ items: Department[] }>('/api/departments').then((r) => r.items),
           fetchJson<{ items: EmployeeType[] }>('/api/employee-types').then((r) => r.items),
+          fetchJson<{ items: LocationItem[] }>('/api/locations').then((r) => r.items),
+          fetchJson<{ companies: CompanyListItem[] }>('/api/companies').then((r) => r.companies.filter((x) => x.type !== 'PARENT')),
         ])
         if (!active) return
         setDepartments(d)
         setEmployeeTypes(t)
-      } catch {
-        // dropdowns remain empty — list still works
-      }
+        setLocations(l)
+        setCompanies(c)
+      } catch {}
     })()
     return () => {
       active = false
     }
   }, [])
 
-  // Reload the list when filters change.
   useEffect(() => {
     let active = true
     const params = new URLSearchParams()
-    if (filterCompanyId) params.set('companyId', filterCompanyId)
-    if (filterLocationId) params.set('locationId', filterLocationId)
+    if (pageCompanyId) params.set('companyId', pageCompanyId)
+    if (pageLocationId) params.set('locationId', pageLocationId)
     if (departmentFilter !== 'all') params.set('departmentId', departmentFilter)
     if (typeFilter !== 'all') params.set('employeeTypeId', typeFilter)
     if (statusFilter !== 'all') params.set('status', statusFilter)
@@ -119,222 +136,414 @@ export function EmployeesModule() {
     return () => {
       active = false
     }
-  }, [filterCompanyId, filterLocationId, departmentFilter, typeFilter, statusFilter])
+  }, [pageCompanyId, pageLocationId, departmentFilter, typeFilter, statusFilter])
+
+  const filteredEmployees = employees.filter((e) => {
+    if (pageCompanyId && e.companyId !== pageCompanyId) return false
+    return (
+      e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      e.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (e.designation && e.designation.toLowerCase().includes(searchQuery.toLowerCase()))
+    )
+  })
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <PageHeader
-        title="Employees"
-        subtitle="Workforce master data"
+        title="Workforce Roster & Employees"
+        subtitle="Master record of human resources, departmental placement, and compensation"
         action={
           isViewOnly ? (
-            <Badge variant="outline" className="gap-1.5 text-muted-foreground">
+            <Badge variant="outline" className="gap-1.5 text-slate-500 border-slate-200">
               <ShieldAlert className="h-3.5 w-3.5" /> View-only access
             </Badge>
           ) : (
-            <Button onClick={() => setAddOpen(true)} size="sm" className="gap-1.5">
-              <UserPlus className="h-4 w-4" /> Add Employee
+            <Button onClick={() => setAddOpen(true)} size="sm" className="bg-[#0B2148] hover:bg-[#102B63] text-white font-semibold text-xs gap-1.5 rounded-lg shadow-sm">
+              <UserPlus className="h-4 w-4 text-[#08B6D8]" /> + Add New Employee
             </Button>
           )
         }
       />
 
-      {/* Filter row */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Filter className="h-3.5 w-3.5" /> Filters
+      {/* Filter and Search Toolbar */}
+      <div className="flex flex-col md:flex-row items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <div className="relative flex-1 md:w-60">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search employee, code, designation..."
+              className="pl-8 h-9 text-xs border-slate-200 rounded-lg focus:border-[#08B6D8]"
+            />
+          </div>
         </div>
 
-        <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-          <SelectTrigger size="sm" className="h-8 w-[180px] text-xs">
-            <SelectValue placeholder="All departments" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All departments</SelectItem>
-            {departments.map((d) => (
-              <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2 flex-wrap w-full md:w-auto justify-end">
+          {/* Unified Filter Box Popover */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="h-8 px-3.5 rounded-full bg-white border border-slate-200 shadow-xs hover:border-slate-300 flex items-center gap-2 text-xs font-bold text-[#0B2148] transition cursor-pointer">
+                <Filter className="h-4 w-4 text-[#08B6D8]" />
+                <span>Filter</span>
+                {(pageCompanyId !== null || pageLocationId !== null || departmentFilter !== 'all' || typeFilter !== 'all' || statusFilter !== 'all') && (
+                  <span className="px-2 py-0.5 rounded-full bg-[#08B6D8] text-white text-[10px] font-mono font-bold">
+                    {[
+                      pageCompanyId !== null,
+                      pageLocationId !== null,
+                      departmentFilter !== 'all',
+                      typeFilter !== 'all',
+                      statusFilter !== 'all',
+                    ].filter(Boolean).length}
+                  </span>
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-4 bg-white rounded-2xl shadow-xl border border-slate-200 z-50">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="text-xs font-bold text-[#0B2148]">Filter Employee Roster</span>
+                  <button
+                    onClick={() => {
+                      setPageCompanyId(null)
+                      setPageLocationId(null)
+                      setDepartmentFilter('all')
+                      setTypeFilter('all')
+                      setStatusFilter('all')
+                    }}
+                    className="text-[10px] text-rose-500 font-bold hover:underline"
+                  >
+                    Reset Filters
+                  </button>
+                </div>
 
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger size="sm" className="h-8 w-[170px] text-xs">
-            <SelectValue placeholder="All types" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All types</SelectItem>
-            {employeeTypes.map((t) => (
-              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+                <div className="space-y-3">
+                  {/* Tenant Scope */}
+                  {companies.length > 0 && (
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-semibold text-slate-600">Tenant Scope</Label>
+                      <Select value={pageCompanyId ?? 'all'} onValueChange={(v) => setPageCompanyId(v === 'all' ? null : v)}>
+                        <SelectTrigger className="h-8 text-xs rounded-lg border-slate-200">
+                          <SelectValue placeholder="All Tenants" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Tenants</SelectItem>
+                          {companies.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
-        <Select
-          value={statusFilter}
-          onValueChange={(v) => setStatusFilter(v as StatusFilter)}
-        >
-          <SelectTrigger size="sm" className="h-8 w-[140px] text-xs">
-            <SelectValue placeholder="All statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="ACTIVE">Active</SelectItem>
-            <SelectItem value="INACTIVE">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
+                  {/* Location */}
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-semibold text-slate-600">Location</Label>
+                    <Select value={pageLocationId ?? 'all'} onValueChange={(v) => setPageLocationId(v === 'all' ? null : v)}>
+                      <SelectTrigger className="h-8 text-xs rounded-lg border-slate-200">
+                        <SelectValue placeholder="All Locations" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Locations</SelectItem>
+                        {locations.map((l) => (
+                          <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-        <div className="ml-auto text-xs text-muted-foreground">
-          {employees.length} {employees.length === 1 ? 'employee' : 'employees'}
+                  {/* Department */}
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-semibold text-slate-600">Department</Label>
+                    <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                      <SelectTrigger className="h-8 text-xs rounded-lg border-slate-200">
+                        <SelectValue placeholder="All Departments" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Departments</SelectItem>
+                        {departments.map((d) => (
+                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Employment Type */}
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-semibold text-slate-600">Employment Type</Label>
+                    <Select value={typeFilter} onValueChange={setTypeFilter}>
+                      <SelectTrigger className="h-8 text-xs rounded-lg border-slate-200">
+                        <SelectValue placeholder="All Employment Types" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Employment Types</SelectItem>
+                        {employeeTypes.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Status */}
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-semibold text-slate-600">Status</Label>
+                    <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+                      <SelectTrigger className="h-8 text-xs rounded-lg border-slate-200">
+                        <SelectValue placeholder="All Statuses" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Statuses</SelectItem>
+                        <SelectItem value="ACTIVE">Active</SelectItem>
+                        <SelectItem value="INACTIVE">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Custom Columns Pill Button matching user screenshot */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="h-8 px-3.5 rounded-full bg-white border border-slate-200 shadow-xs hover:border-slate-300 flex items-center gap-2 text-xs font-bold text-[#0B2148] transition cursor-pointer">
+                <Columns3 className="h-4 w-4 text-[#08B6D8]" />
+                <span>Custom Columns</span>
+                <span className="px-2 py-0.5 rounded-full bg-[#0B2148] text-white text-[10px] font-mono font-bold">
+                  {Object.values(columnVisibility).filter(Boolean).length}/{Object.keys(columnVisibility).length}
+                </span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-4 bg-white rounded-2xl shadow-xl border border-slate-200 z-50">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="text-xs font-bold text-[#0B2148]">Table Column Visibility</span>
+                  <button
+                    onClick={() => {
+                      const reset: Record<string, boolean> = {}
+                      Object.keys(columnVisibility).forEach((k) => (reset[k] = true))
+                      setColumnVisibility(reset)
+                    }}
+                    className="text-[10px] text-[#08B6D8] font-bold hover:underline"
+                  >
+                    Show All
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                  {[
+                    { id: 'name', label: 'Employee Name' },
+                    { id: 'company', label: 'Company Scope' },
+                    { id: 'department', label: 'Department' },
+                    { id: 'type', label: 'Employment Type' },
+                    { id: 'location', label: 'Location' },
+                    { id: 'designation', label: 'Designation' },
+                    { id: 'contact', label: 'Contact Info' },
+                    { id: 'salary', label: 'Annual Salary' },
+                    { id: 'allocations', label: 'Allocations' },
+                    { id: 'status', label: 'Status' },
+                    ...extraCols.map((c) => ({ id: c, label: c })),
+                  ].map((col) => (
+                    <label key={col.id} className="flex items-center justify-between text-xs cursor-pointer hover:bg-slate-50 p-1.5 rounded-lg transition">
+                      <span className="text-slate-700 font-medium">{col.label}</span>
+                      <input
+                        type="checkbox"
+                        checked={columnVisibility[col.id] !== false}
+                        onChange={(e) => setColumnVisibility({ ...columnVisibility, [col.id]: e.target.checked })}
+                        className="rounded border-slate-300 text-[#08B6D8] focus:ring-[#08B6D8]"
+                      />
+                    </label>
+                  ))}
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5">
+                  <Input
+                    placeholder="Add column header..."
+                    value={newColHeader}
+                    onChange={(e) => setNewColHeader(e.target.value)}
+                    className="h-8 text-xs flex-1 border-slate-200"
+                  />
+                  <Button
+                    size="sm"
+                    type="button"
+                    onClick={() => {
+                      if (newColHeader.trim() && !extraCols.includes(newColHeader.trim())) {
+                        const name = newColHeader.trim()
+                        setExtraCols([...extraCols, name])
+                        setColumnVisibility({ ...columnVisibility, [name]: true })
+                        setNewColHeader('')
+                        toast.success(`Custom column "${name}" added to table!`)
+                      }
+                    }}
+                    className="h-8 text-xs bg-[#0B2148] text-white px-2.5 rounded-lg"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
-      {/* List */}
+      {/* Employees Table */}
       {loading ? (
-        <LoadingState label="Loading employees…" />
+        <LoadingState label="Loading workforce records…" />
       ) : error ? (
         <ErrorState message={error} />
-      ) : employees.length === 0 ? (
+      ) : filteredEmployees.length === 0 ? (
         <EmptyState
           title="No employees found"
-          desc="Adjust the filters above or add a new employee to get started."
-          icon={<UsersRound className="h-8 w-8 text-muted-foreground/60" />}
+          desc="Adjust filters or register a new team member."
+          icon={<UsersRound className="h-8 w-8 text-slate-400" />}
         />
       ) : (
-        <Card className="shadow-sm">
+        <Card className="border border-slate-200/80 shadow-sm bg-white rounded-2xl overflow-hidden">
           <CardContent className="p-0">
-            <div className="overflow-x-auto scroll-thin max-h-[70vh]">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/30 hover:bg-muted/30">
-                    <TableHead className="pl-4">Employee</TableHead>
-                    {isGroupAdmin && <TableHead>Company</TableHead>}
-                    <TableHead>Department</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Designation</TableHead>
-                    <TableHead className="text-right">Salary</TableHead>
-                    <TableHead>Joined</TableHead>
-                    <TableHead className="text-center">Allocations</TableHead>
-                    <TableHead className="text-center">Costs</TableHead>
-                    <TableHead className="pr-4">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {employees.map((e) => (
-                    <TableRow key={e.id} className="hover:bg-muted/40">
-                      <TableCell className="pl-4">
-                        <div className="flex items-center gap-2.5">
-                          <div className="h-8 w-8 rounded-md bg-violet-50 text-violet-700 ring-1 ring-violet-200 flex items-center justify-center text-xs font-semibold">
-                            {e.name.slice(0, 2).toUpperCase()}
+            <div className="overflow-x-auto scroll-thin">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                    {columnVisibility.name !== false && <th className="py-3 px-4">Employee Name</th>}
+                    {isGroupAdmin && columnVisibility.company !== false && <th className="py-3 px-4">Tenant Scope</th>}
+                    {columnVisibility.department !== false && <th className="py-3 px-4">Department</th>}
+                    {columnVisibility.type !== false && <th className="py-3 px-4">Type</th>}
+                    {columnVisibility.location !== false && <th className="py-3 px-4">Location</th>}
+                    {columnVisibility.designation !== false && <th className="py-3 px-4">Designation</th>}
+                    {columnVisibility.contact !== false && <th className="py-3 px-4">Contact Info</th>}
+                    {extraCols.map((c) => columnVisibility[c] !== false && <th key={c} className="py-3 px-4">{c}</th>)}
+                    {columnVisibility.salary !== false && <th className="py-3 px-4 text-right">Annual Salary</th>}
+                    {columnVisibility.allocations !== false && <th className="py-3 px-4 text-center">Allocations</th>}
+                    {columnVisibility.status !== false && <th className="py-3 px-4">Status</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredEmployees.map((e) => (
+                    <tr key={e.id} className="hover:bg-[#E8F8FC]/40 transition">
+                      {columnVisibility.name !== false && (
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="h-8 w-8 rounded-lg bg-[#0B2148]/10 text-[#0B2148] flex items-center justify-center font-bold text-xs">
+                              {e.name.slice(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="font-bold text-[#0B2148] text-sm">{e.name}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">{e.code}</div>
+                            </div>
                           </div>
-                          <div className="leading-tight">
-                            <div className="text-sm font-medium">{e.name}</div>
-                            <Badge variant="outline" className="mt-0.5 text-[10px] font-mono py-0">
-                              {e.code}
-                            </Badge>
-                          </div>
-                        </div>
-                      </TableCell>
-                      {isGroupAdmin && (
-                        <TableCell>
-                          <div className="flex items-center gap-1.5 text-sm">
-                            <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span>{e.company?.name ?? '—'}</span>
-                          </div>
-                        </TableCell>
+                        </td>
                       )}
-                      <TableCell>
-                        {e.department ? (
-                          <span className="text-sm">{e.department.name}</span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {e.employeeType ? (
-                          <Badge variant="secondary" className="bg-amber-50 text-amber-700 border-amber-200">
-                            {e.employeeType.name}
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {e.location ? (
-                          <div className="flex items-center gap-1.5 text-sm">
-                            <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span>{e.location.name}</span>
+                      {isGroupAdmin && columnVisibility.company !== false && (
+                        <td className="py-3 px-4 font-semibold text-slate-700">
+                          <div className="flex items-center gap-1.5">
+                            <Building2 className="h-3.5 w-3.5 text-[#08B6D8]" />
+                            {e.company?.name ?? '—'}
                           </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {e.designation ? (
-                          <span className="text-sm">{e.designation}</span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right text-sm tabular-nums">
-                        {e.salary != null && Number(e.salary) > 0
-                          ? formatINR(Number(e.salary))
-                          : <span className="text-muted-foreground">—</span>}
-                      </TableCell>
-                      <TableCell className="text-sm whitespace-nowrap">
-                        {e.joiningDate ? formatDate(e.joiningDate) : '—'}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="secondary">{e._count?.allocations ?? 0}</Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="secondary">{e._count?.costs ?? 0}</Badge>
-                      </TableCell>
-                      <TableCell className="pr-4">
-                        <Badge
-                          variant="outline"
-                          className={
-                            e.status === 'ACTIVE'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : 'bg-rose-50 text-rose-700 border-rose-200'
-                          }
-                        >
-                          {e.status === 'ACTIVE' ? (
-                            <BadgeCheck className="h-3 w-3" />
+                        </td>
+                      )}
+                      {columnVisibility.department !== false && (
+                        <td className="py-3 px-4 font-semibold text-[#0B2148]">
+                          {e.department?.name ?? '—'}
+                        </td>
+                      )}
+                      {columnVisibility.type !== false && (
+                        <td className="py-3 px-4">
+                          {e.employeeType ? (
+                            <Badge className="bg-[#08B6D8]/15 text-[#0B2148] font-semibold text-[10px]">
+                              {e.employeeType.name}
+                            </Badge>
+                          ) : '—'}
+                        </td>
+                      )}
+                      {columnVisibility.location !== false && (
+                        <td className="py-3 px-4 text-slate-600">
+                          {e.location ? (
+                            <div className="flex items-center gap-1">
+                              <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                              {e.location.name}
+                            </div>
+                          ) : '—'}
+                        </td>
+                      )}
+                      {columnVisibility.designation !== false && (
+                        <td className="py-3 px-4 text-slate-700 font-medium">
+                          {e.designation ?? '—'}
+                        </td>
+                      )}
+                      {columnVisibility.contact !== false && (
+                        <td className="py-3 px-4">
+                          {e.phone || e.email ? (
+                            <div className="space-y-0.5">
+                              {e.phone && (
+                                <div className="text-[11px] font-medium text-slate-700 flex items-center gap-1 font-mono">
+                                  <Phone className="h-3 w-3 text-[#08B6D8]" />
+                                  {e.phone}
+                                </div>
+                              )}
+                              {e.email && (
+                                <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                                  <Mail className="h-2.5 w-2.5 text-slate-400" />
+                                  {e.email}
+                                </div>
+                              )}
+                            </div>
                           ) : (
-                            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                            <span className="text-slate-300 italic">—</span>
                           )}
-                          {e.status === 'ACTIVE' ? 'Active' : 'Inactive'}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
+                        </td>
+                      )}
+                      {extraCols.map((colName) => (
+                        columnVisibility[colName] !== false && (
+                          <td key={colName} className="py-3 px-4 text-slate-600 font-medium">
+                            {(() => {
+                              if (!e.customFields) return '—'
+                              try {
+                                const parsed = JSON.parse(e.customFields)
+                                return parsed[colName] ?? '—'
+                              } catch {
+                                return '—'
+                              }
+                            })()}
+                          </td>
+                        )
+                      ))}
+                      {columnVisibility.salary !== false && (
+                        <td className="py-3 px-4 text-right font-bold text-[#0B2148]">
+                          {e.salary != null && Number(e.salary) > 0 ? formatINR(Number(e.salary)) : '—'}
+                        </td>
+                      )}
+                      {columnVisibility.allocations !== false && (
+                        <td className="py-3 px-4 text-center">
+                          <Badge variant="secondary" className="font-bold">{e._count?.allocations ?? 0}</Badge>
+                        </td>
+                      )}
+                      {columnVisibility.status !== false && (
+                        <td className="py-3 px-4">
+                          <Badge className={`text-[10px] font-bold ${e.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                            {e.status}
+                          </Badge>
+                        </td>
+                      )}
+                    </tr>
                   ))}
-                </TableBody>
-              </Table>
+                </tbody>
+              </table>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Add dialog */}
+      {/* Add Employee Dialog */}
       <AddEmployeeDialog
         open={addOpen}
         onOpenChange={setAddOpen}
         isGroupAdmin={isGroupAdmin}
-        defaultCompanyId={filterCompanyId ?? user?.companyId ?? null}
-        onCreated={(e) => {
-          setEmployees((prev) => {
-            const next = [...prev, e]
-            next.sort((a, b) => a.name.localeCompare(b.name))
-            return next
-          })
-        }}
+        defaultCompanyId={user?.companyId ?? null}
+        onCreated={(e) => setEmployees([e, ...employees])}
       />
     </div>
   )
 }
-
-// ---- Add Employee Dialog ---------------------------------------------------
 
 function AddEmployeeDialog({
   open,
@@ -362,67 +571,44 @@ function AddEmployeeDialog({
   const [locationId, setLocationId] = useState('')
   const [designation, setDesignation] = useState('')
   const [salary, setSalary] = useState('')
-  const [joiningDate, setJoiningDate] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [customFieldsList, setCustomFieldsList] = useState<{ key: string; value: string }[]>([])
   const [submitting, setSubmitting] = useState(false)
 
-  // Load dropdown options each time the dialog opens.
   useEffect(() => {
     if (!open) return
-    let active = true
     ;(async () => {
       try {
         const [c, d, t, l] = await Promise.all([
           isGroupAdmin
-            ? fetchJson<{ companies: CompanyListItem[] }>('/api/companies').then(
-                (r) => r.companies.filter((x) => x.type !== 'PARENT'),
-              )
+            ? fetchJson<{ companies: CompanyListItem[] }>('/api/companies').then((r) => r.companies.filter((x) => x.type !== 'PARENT'))
             : Promise.resolve<CompanyListItem[]>([]),
           fetchJson<{ items: Department[] }>('/api/departments').then((r) => r.items),
           fetchJson<{ items: EmployeeType[] }>('/api/employee-types').then((r) => r.items),
           fetchJson<{ items: LocationItem[] }>('/api/locations').then((r) => r.items),
         ])
-        if (!active) return
         setCompanies(c)
         setDepartments(d)
         setEmployeeTypes(t)
         setLocations(l)
         if (isGroupAdmin && !companyId && defaultCompanyId) setCompanyId(defaultCompanyId)
-      } catch {
-        // ignore — selects will be empty
-      }
+      } catch (e) {}
     })()
-    return () => {
-      active = false
-    }
   }, [open])
-
-  // Reset form fields when dialog closes.
-  useEffect(() => {
-    if (open) return
-    setName('')
-    setCode('')
-    setEmployeeTypeId('')
-    setDepartmentId('')
-    setLocationId('')
-    setDesignation('')
-    setSalary('')
-    setJoiningDate('')
-  }, [open])
-
-  const canSubmit =
-    name.trim() &&
-    code.trim() &&
-    employeeTypeId &&
-    departmentId &&
-    locationId &&
-    (!isGroupAdmin || companyId) &&
-    !submitting
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!canSubmit) return
+    if (!name.trim() || !code.trim() || !employeeTypeId || !departmentId || !locationId || (isGroupAdmin && !companyId)) return
     setSubmitting(true)
     try {
+      const customObj: Record<string, string> = {}
+      for (const item of customFieldsList) {
+        if (item.key.trim() && item.value.trim()) {
+          customObj[item.key.trim()] = item.value.trim()
+        }
+      }
+
       const body: Record<string, unknown> = {
         name: name.trim(),
         code: code.trim().toUpperCase(),
@@ -431,23 +617,26 @@ function AddEmployeeDialog({
         locationId,
         designation: designation.trim() || undefined,
         salary: salary ? Number(salary) : undefined,
-        joiningDate: joiningDate || undefined,
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        customFields: Object.keys(customObj).length > 0 ? customObj : undefined,
       }
       if (isGroupAdmin) body.companyId = companyId
       const { employee } = await fetchJson<{ employee: Employee }>('/api/employees', {
         method: 'POST',
         body: JSON.stringify(body),
       })
-      // POST response lacks _count — coerce to zeros for immediate render.
-      const normalized: Employee = {
-        ...employee,
-        _count: employee._count ?? { allocations: 0, costs: 0 },
-      }
-      toast.success('Employee added', { description: `${normalized.name} · ${normalized.code}` })
-      onCreated(normalized)
+      toast.success(`Employee ${employee.name} added!`)
+      onCreated(employee)
       onOpenChange(false)
-    } catch (err) {
-      toast.error('Failed to add employee', { description: (err as Error).message })
+      setName('')
+      setCode('')
+      setSalary('')
+      setPhone('')
+      setEmail('')
+      setCustomFieldsList([])
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to add employee')
     } finally {
       setSubmitting(false)
     }
@@ -455,29 +644,25 @@ function AddEmployeeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px]">
+      <DialogContent className="sm:max-w-md p-6 rounded-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <UserPlus className="h-4 w-4 text-primary" /> Add new employee
-          </DialogTitle>
-          <DialogDescription>
-            Register a new employee under a tenant. Required fields are marked with *.
+          <DialogTitle className="text-lg font-bold text-[#0B2148]">Add Employee Record</DialogTitle>
+          <DialogDescription className="text-xs text-slate-500">
+            Register a new employee into the workforce master.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="grid gap-4">
+        <form onSubmit={handleSubmit} className="space-y-4 py-2">
           {isGroupAdmin && (
-            <div className="grid gap-1.5">
-              <Label className="text-xs">Company *</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Company Scope *</Label>
               <Select value={companyId} onValueChange={setCompanyId}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="h-9 text-xs">
                   <SelectValue placeholder="Select company" />
                 </SelectTrigger>
                 <SelectContent>
                   {companies.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name} · {c.code}
-                    </SelectItem>
+                    <SelectItem key={c.id} value={c.id}>{c.name} ({c.code})</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -485,44 +670,21 @@ function AddEmployeeDialog({
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label className="text-xs">Employee name *</Label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Anita Sharma"
-                autoFocus
-              />
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Employee Name *</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Anita Sharma" className="h-9 text-xs" required />
             </div>
-            <div className="grid gap-1.5">
-              <Label className="text-xs">Code *</Label>
-              <Input
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="e.g. EMP-001"
-                maxLength={20}
-              />
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Employee Code *</Label>
+              <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="e.g. EMP-101" className="h-9 text-xs font-mono" required />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label className="text-xs">Employee type *</Label>
-              <Select value={employeeTypeId} onValueChange={setEmployeeTypeId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employeeTypes.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-1.5">
-              <Label className="text-xs">Department *</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Department *</Label>
               <Select value={departmentId} onValueChange={setDepartmentId}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="h-9 text-xs">
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
@@ -532,63 +694,119 @@ function AddEmployeeDialog({
                 </SelectContent>
               </Select>
             </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label className="text-xs">Location *</Label>
-              <Select value={locationId} onValueChange={setLocationId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select location" />
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Employment Type *</Label>
+              <Select value={employeeTypeId} onValueChange={setEmployeeTypeId}>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {locations.map((l) => (
-                    <SelectItem key={l.id} value={l.id}>
-                      {l.name}{l.country ? ` · ${l.country}` : ''}
-                    </SelectItem>
+                  {employeeTypes.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-1.5">
-              <Label className="text-xs">Designation</Label>
-              <Input
-                value={designation}
-                onChange={(e) => setDesignation(e.target.value)}
-                placeholder="e.g. Senior Engineer"
-              />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Location *</Label>
+              <Select value={locationId} onValueChange={setLocationId}>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
+                <SelectContent>
+                  {locations.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Designation</Label>
+              <Input value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder="e.g. Lead Logistics Analyst" className="h-9 text-xs" />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label className="text-xs">Salary (₹ / year)</Label>
-              <Input
-                type="number"
-                min="0"
-                step="1000"
-                value={salary}
-                onChange={(e) => setSalary(e.target.value)}
-                placeholder="Annual salary"
-              />
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Annual Salary (INR)</Label>
+              <Input type="number" value={salary} onChange={(e) => setSalary(e.target.value)} placeholder="e.g. 1200000" className="h-9 text-xs" />
             </div>
-            <div className="grid gap-1.5">
-              <Label className="text-xs">Joining date</Label>
-              <Input
-                type="date"
-                value={joiningDate}
-                onChange={(e) => setJoiningDate(e.target.value)}
-              />
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Mobile / Phone Number</Label>
+              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g. +91 98765 12345" className="h-9 text-xs font-mono" />
             </div>
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!canSubmit}>
-              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {submitting ? 'Saving…' : 'Add employee'}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-slate-700">Email Address</Label>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. employee@drona.com" className="h-9 text-xs" />
+          </div>
+
+          {/* Dynamic Custom Columns & Fields Manager */}
+          <div className="space-y-2 pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-bold text-[#0B2148] flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5 text-[#08B6D8]" /> Custom Columns / Attributes
+              </Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCustomFieldsList([...customFieldsList, { key: '', value: '' }])}
+                className="h-7 text-[11px] text-[#08B6D8] border-[#08B6D8]/40 hover:bg-[#E8F8FC] font-semibold gap-1 rounded-lg"
+              >
+                <Plus className="h-3 w-3" /> + Add Custom Field
+              </Button>
+            </div>
+
+            {customFieldsList.length > 0 && (
+              <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                {customFieldsList.map((field, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      placeholder="Column Name (e.g. Blood Group)"
+                      value={field.key}
+                      onChange={(e) => {
+                        const copy = [...customFieldsList]
+                        copy[idx].key = e.target.value
+                        setCustomFieldsList(copy)
+                      }}
+                      className="h-8 text-xs flex-1 border-slate-200"
+                    />
+                    <Input
+                      placeholder="Value (e.g. O+ / PF-99182)"
+                      value={field.value}
+                      onChange={(e) => {
+                        const copy = [...customFieldsList]
+                        copy[idx].value = e.target.value
+                        setCustomFieldsList(copy)
+                      }}
+                      className="h-8 text-xs flex-1 border-slate-200"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCustomFieldsList(customFieldsList.filter((_, i) => i !== idx))}
+                      className="h-8 w-8 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg shrink-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" disabled={submitting} className="bg-[#0B2148] text-white">
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Employee'}
             </Button>
           </DialogFooter>
         </form>

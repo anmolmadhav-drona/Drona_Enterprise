@@ -53,6 +53,9 @@ export async function POST(req: NextRequest) {
     designation,
     salary,
     joiningDate,
+    email,
+    phone,
+    customFields,
   } = body
   if (!name || !code || !employeeTypeId || !departmentId || !locationId) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -74,8 +77,21 @@ export async function POST(req: NextRequest) {
       designation,
       salary: salary ? Number(salary) : 0,
       joiningDate: joiningDate ? new Date(joiningDate) : null,
+      email: email || null,
+      phone: phone || null,
+      customFields: customFields
+        ? typeof customFields === 'string'
+          ? customFields
+          : JSON.stringify(customFields)
+        : null,
     },
-    include: { company: true, employeeType: true, department: true, location: true },
+    include: {
+      company: true,
+      employeeType: true,
+      department: true,
+      location: true,
+      _count: { select: { allocations: true, costs: true } },
+    },
   })
   return NextResponse.json({ employee: created }, { status: 201 })
 }

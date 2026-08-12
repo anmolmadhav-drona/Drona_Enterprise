@@ -6,8 +6,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -16,11 +15,11 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -43,111 +42,162 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* Drona palette - inspired by the supplied architecture diagram.
-   Navy primary (allowed: explicitly requested by user's design),
-   with warm accent and pastel module colors. */
 :root {
   --radius: 0.625rem;
-  --background: oklch(0.99 0.005 240);
-  --foreground: oklch(0.18 0.02 250);
+  
+  /* Primary Drona Design Tokens */
+  --drona-navy-dark: #071426;
+  --drona-navy: #0B2148;
+  --drona-navy-light: #102B63;
+  --drona-navy-accent: #123B7A;
+  
+  --drona-cyan: #08B6D8;
+  --drona-cyan-hover: #16C4E8;
+  --drona-cyan-bright: #22C7E8;
+  --drona-cyan-light: #E8F8FC;
+  
+  --drona-bg: #F8FBFD;
+  --drona-surface: #FFFFFF;
+  --drona-border: #D9E4EE;
+  
+  --drona-text-main: #0F172A;
+  --drona-text-sub: #475569;
+  --drona-text-muted: #64748B;
+  
+  --drona-success: #059669;
+  --drona-danger: #DC2626;
+  --drona-warning: #D97706;
+  --drona-info: #2563EB;
+  --drona-purple: #7C3AED;
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.02 250);
+  /* Standard Component Mappings */
+  --background: var(--drona-bg);
+  --foreground: var(--drona-text-main);
 
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.02 250);
+  --card: #FFFFFF;
+  --card-foreground: var(--drona-text-main);
 
-  --primary: oklch(0.27 0.08 264);          /* navy #1e3a8a */
-  --primary-foreground: oklch(0.985 0 0);
+  --popover: #FFFFFF;
+  --popover-foreground: var(--drona-text-main);
 
-  --secondary: oklch(0.96 0.01 240);
-  --secondary-foreground: oklch(0.27 0.08 264);
+  --primary: #0B2148;
+  --primary-foreground: #FFFFFF;
 
-  --muted: oklch(0.97 0.005 240);
-  --muted-foreground: oklch(0.45 0.02 250);
+  --secondary: #E8F8FC;
+  --secondary-foreground: #0B2148;
 
-  --accent: oklch(0.94 0.04 80);             /* soft amber */
-  --accent-foreground: oklch(0.27 0.08 264);
+  --muted: #F1F5F9;
+  --muted-foreground: #64748B;
 
-  --destructive: oklch(0.577 0.245 27.325);
+  --accent: #E8F8FC;
+  --accent-foreground: #0B2148;
 
-  --border: oklch(0.92 0.008 240);
-  --input: oklch(0.92 0.008 240);
-  --ring: oklch(0.27 0.08 264);
+  --destructive: #DC2626;
 
-  --chart-1: oklch(0.42 0.13 264);   /* navy */
-  --chart-2: oklch(0.65 0.16 162);   /* emerald */
-  --chart-3: oklch(0.78 0.16 75);    /* amber */
-  --chart-4: oklch(0.55 0.20 305);   /* violet */
-  --chart-5: oklch(0.58 0.22 25);    /* red */
+  --border: #D9E4EE;
+  --input: #D9E4EE;
+  --ring: #08B6D8;
 
-  --sidebar: oklch(0.22 0.05 264);
-  --sidebar-foreground: oklch(0.96 0.005 240);
-  --sidebar-primary: oklch(0.78 0.16 75);
-  --sidebar-primary-foreground: oklch(0.22 0.05 264);
-  --sidebar-accent: oklch(0.30 0.06 264);
-  --sidebar-accent-foreground: oklch(0.97 0.005 240);
-  --sidebar-border: oklch(0.30 0.04 264 / 70%);
-  --sidebar-ring: oklch(0.78 0.16 75);
+  /* Financial Charts & Visualizations */
+  --chart-1: #08B6D8;   /* Cyan - Revenue */
+  --chart-2: #DC2626;   /* Rose - Cost */
+  --chart-3: #0B2148;   /* Navy - Net Profit */
+  --chart-4: #2563EB;   /* Blue - Margin */
+  --chart-5: #7C3AED;   /* Purple - Categories */
+
+  /* Sidebar Specific (Deep Drona Navy) */
+  --sidebar: #081B3A;
+  --sidebar-foreground: #F8FBFD;
+  --sidebar-primary: #08B6D8;
+  --sidebar-primary-foreground: #081B3A;
+  --sidebar-accent: rgba(8, 182, 216, 0.12);
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: rgba(217, 228, 238, 0.15);
+  --sidebar-ring: #08B6D8;
 }
 
 .dark {
-  --background: oklch(0.16 0.02 264);
-  --foreground: oklch(0.97 0.005 240);
-  --card: oklch(0.22 0.025 264);
-  --card-foreground: oklch(0.97 0.005 240);
-  --popover: oklch(0.22 0.025 264);
-  --popover-foreground: oklch(0.97 0.005 240);
-  --primary: oklch(0.78 0.16 75);
-  --primary-foreground: oklch(0.22 0.05 264);
-  --secondary: oklch(0.27 0.03 264);
-  --secondary-foreground: oklch(0.97 0.005 240);
-  --muted: oklch(0.27 0.03 264);
-  --muted-foreground: oklch(0.72 0.01 240);
-  --accent: oklch(0.35 0.06 264);
-  --accent-foreground: oklch(0.97 0.005 240);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.78 0.16 75);
-  --chart-1: oklch(0.55 0.18 264);
-  --chart-2: oklch(0.65 0.16 162);
-  --chart-3: oklch(0.78 0.16 75);
-  --chart-4: oklch(0.55 0.20 305);
-  --chart-5: oklch(0.58 0.22 25);
-  --sidebar: oklch(0.13 0.02 264);
-  --sidebar-foreground: oklch(0.97 0.005 240);
-  --sidebar-primary: oklch(0.78 0.16 75);
-  --sidebar-primary-foreground: oklch(0.22 0.05 264);
-  --sidebar-accent: oklch(0.27 0.03 264);
-  --sidebar-accent-foreground: oklch(0.97 0.005 240);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.78 0.16 75);
+  --background: #071426;
+  --foreground: #F8FBFD;
+  --card: #0B1E36;
+  --card-foreground: #F8FBFD;
+  --popover: #0B1E36;
+  --popover-foreground: #F8FBFD;
+  --primary: #08B6D8;
+  --primary-foreground: #071426;
+  --secondary: #102A43;
+  --secondary-foreground: #F8FBFD;
+  --muted: #102A43;
+  --muted-foreground: #94A3B8;
+  --accent: #102A43;
+  --accent-foreground: #F8FBFD;
+  --destructive: #EF4444;
+  --border: rgba(217, 228, 238, 0.12);
+  --input: rgba(217, 228, 238, 0.15);
+  --ring: #08B6D8;
+  
+  --chart-1: #16C4E8;
+  --chart-2: #F87171;
+  --chart-3: #60A5FA;
+  --chart-4: #34D399;
+  --chart-5: #A78BFA;
+  
+  --sidebar: #040D1A;
+  --sidebar-foreground: #F8FBFD;
+  --sidebar-primary: #08B6D8;
+  --sidebar-primary-foreground: #040D1A;
+  --sidebar-accent: rgba(8, 182, 216, 0.18);
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #08B6D8;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "ss01", "cv01";
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  }
+
+  /* Custom input focus ring per design spec */
+  input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(8, 182, 216, 0.2);
+    border-color: #08B6D8 !important;
   }
 }
 
-/* Custom scrollbar for data lists */
+/* Custom scrollbars */
 .scroll-thin::-webkit-scrollbar { width: 6px; height: 6px; }
 .scroll-thin::-webkit-scrollbar-track { background: transparent; }
 .scroll-thin::-webkit-scrollbar-thumb {
-  background: oklch(0.78 0.02 240);
+  background: #CBD5E1;
   border-radius: 4px;
 }
-.scroll-thin::-webkit-scrollbar-thumb:hover { background: oklch(0.65 0.02 240); }
+.scroll-thin::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 
-/* Module accent classes - mirrors the colored cards from the diagram */
-.module-blue   { background-color: oklch(0.93 0.04 240); border-left: 3px solid oklch(0.55 0.18 264); }
-.module-green  { background-color: oklch(0.94 0.05 162); border-left: 3px solid oklch(0.65 0.16 162); }
-.module-amber  { background-color: oklch(0.96 0.05 80);  border-left: 3px solid oklch(0.78 0.16 75); }
-.module-violet { background-color: oklch(0.95 0.04 305); border-left: 3px solid oklch(0.55 0.20 305); }
-.module-rose   { background-color: oklch(0.95 0.04 25);  border-left: 3px solid oklch(0.58 0.22 25); }
-.module-sky    { background-color: oklch(0.94 0.04 230); border-left: 3px solid oklch(0.55 0.16 230); }
+/* Subtle Network & Brand utilities */
+.bg-drona-navy { background-color: #0B2148; }
+.text-drona-navy { color: #0B2148; }
+.bg-drona-cyan { background-color: #08B6D8; }
+.text-drona-cyan { color: #08B6D8; }
+
+.drona-glow {
+  box-shadow: 0 0 20px rgba(8, 182, 216, 0.18);
+}
+
+.drona-card-shadow {
+  box-shadow: 0 1px 3px rgba(11, 33, 72, 0.05), 0 10px 25px -5px rgba(11, 33, 72, 0.04);
+}
+
+/* Keyframes for subtle network nodes pulsing */
+@keyframes networkPulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.15); }
+}
+
+.animate-network-pulse {
+  animation: networkPulse 4s ease-in-out infinite;
+}

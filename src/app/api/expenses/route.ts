@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   const accessibleIds = await getAccessibleCompanyIds(user)
 
   const body = await req.json()
-  const { companyId, categoryId, date, amount, description } = body
+  const { companyId, categoryId, date, amount, description, documentUrl, documentName } = body
   if (!categoryId || !date || amount == null) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
@@ -62,10 +62,10 @@ export async function POST(req: NextRequest) {
       date: new Date(date),
       amount: Number(amount),
       description,
+      documentUrl: documentUrl || null,
+      documentName: documentName || null,
     },
     include: { category: true, company: true },
   })
   return NextResponse.json({ expense: created }, { status: 201 })
 }
-
-export async function GET_CATEGORIES() {}
