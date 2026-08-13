@@ -42,13 +42,22 @@ model Company {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  parent      Company?  @relation("CompanyHierarchy", fields: [parentId], references: [id])
-  children    Company[] @relation("CompanyHierarchy")
-  users       User[]
-  clients     Client[]
-  employees   Employee[]
-  expenses    Expense[]
-  categories  ExpenseCategory[]
+  parent              Company?               @relation("CompanyHierarchy", fields: [parentId], references: [id])
+  children            Company[]              @relation("CompanyHierarchy")
+  users               User[]
+  clients             Client[]
+  employees           Employee[]
+  expenses            Expense[]
+  categories          ExpenseCategory[]
+  vendors             Vendor[]
+  accounts            Account[]
+  bills               Bill[]
+  customerPayments    CustomerPayment[]
+  vendorPayments      VendorPayment[]
+  financialTxns       FinancialTransaction[]
+  importJobs          ImportJob[]
+  documents           Document[]
+  auditLogs           AuditLog[]
 }
 
 // ============================================================
@@ -108,6 +117,8 @@ model Client {
   contactEmail String?
   contactPhone String?
   customFields String?
+  source       String?  @default("MANUAL") // MANUAL | EXCEL_IMPORT | CSV_IMPORT | TALLY
+  externalId   String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -117,6 +128,8 @@ model Client {
   revenues     Revenue[]
   allocations  EmployeeClientAllocation[]
   documents    ClientDocument[]
+  payments     CustomerPayment[]
+  financialTxns FinancialTransaction[]
 
   @@unique([companyId, code])
 }
@@ -138,6 +151,7 @@ model Revenue {
   id           String   @id @default(cuid())
   clientId     String
   date         DateTime
+  dueDate      DateTime?
   invoiceNo    String
   description  String?
   quantity     Float    @default(1)
@@ -146,12 +160,152 @@ model Revenue {
   items        String?  // JSON stringified array of line items [{ name, quantity, rate, gstPercent, amount }]
   subtotal     Float?   // Total before tax
   taxAmount    Float?   // Total tax / GST amount
+  status       String?  @default("UNPAID") // UNPAID | PARTIAL | PAID | OVERDUE
+  source       String?  @default("MANUAL") // MANUAL | EXCEL_IMPORT | CSV_IMPORT | TALLY
+  externalId   String?
   documentUrl  String?
   documentName String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client       Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  payments     CustomerPayment[]
+  financialTxns FinancialTransaction[]
+}
+
+model Vendor {
+  id           String   @id @default(cuid())
+  companyId    String
+  name         String
+  code         String?
+  email        String?
+  phone        String?
+  gstin        String?
+  address      String?
+  status       String   @default("ACTIVE") // ACTIVE | INACTIVE
+  source       String?  @default("MANUAL")
+  externalId   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company      Company  @relation(fields: [companyId], references: [id])
+  bills        Bill[]
+  payments     VendorPayment[]
+  financialTxns FinancialTransaction[]
+
+  @@unique([companyId, name])
+}
+
+model Account {
+  id           String   @id @default(cuid())
+  companyId    String
+  name         String
+  accountCode  String
+  accountType  String   // ASSET | LIABILITY | EQUITY | REVENUE | EXPENSE
+  parentId     String?
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company      Company                @relation(fields: [companyId], references: [id])
+  parent       Account?               @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children     Account[]              @relation("AccountHierarchy")
+  financialTxns FinancialTransaction[]
+
+  @@unique([companyId, accountCode])
+}
+
+model CustomerPayment {
+  id              String   @id @default(cuid())
+  companyId       String
+  revenueId       String
+  clientId        String
+  paymentDate     DateTime
+  amount          Float
+  paymentMethod   String   @default("BANK_TRANSFER") // BANK_TRANSFER | CHEQUE | CASH | UPI | OTHER
+  referenceNumber String?
+  notes           String?
+  status          String   @default("ACTIVE") // ACTIVE | REVERSED
+  source          String?  @default("MANUAL")
+  externalId      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company         Company  @relation(fields: [companyId], references: [id])
+  revenue         Revenue  @relation(fields: [revenueId], references: [id], onDelete: Cascade)
+  client          Client   @relation(fields: [clientId], references: [id])
+}
+
+model Bill {
+  id           String   @id @default(cuid())
+  companyId    String
+  vendorId     String
+  billNumber   String
+  billDate     DateTime
+  dueDate      DateTime?
+  subtotal     Float?
+  taxAmount    Float?
+  totalAmount  Float
+  description  String?
+  status       String   @default("UNPAID") // UNPAID | PARTIAL | PAID | OVERDUE
+  source       String?  @default("MANUAL")
+  externalId   String?
+  documentUrl  String?
+  documentName String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company      Company        @relation(fields: [companyId], references: [id])
+  vendor       Vendor         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  payments     VendorPayment[]
+  financialTxns FinancialTransaction[]
+}
+
+model VendorPayment {
+  id              String   @id @default(cuid())
+  companyId       String
+  billId          String
+  vendorId        String
+  paymentDate     DateTime
+  amount          Float
+  paymentMethod   String   @default("BANK_TRANSFER")
+  referenceNumber String?
+  notes           String?
+  status          String   @default("ACTIVE") // ACTIVE | REVERSED
+  source          String?  @default("MANUAL")
+  externalId      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company         Company  @relation(fields: [companyId], references: [id])
+  bill            Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+  vendor          Vendor   @relation(fields: [vendorId], references: [id])
+}
+
+model FinancialTransaction {
+  id              String   @id @default(cuid())
+  companyId       String
+  transactionDate DateTime
+  transactionType String   // INVOICE | CUSTOMER_PAYMENT | BILL | VENDOR_PAYMENT | EXPENSE
+  referenceType   String?  // REVENUE | BILL | EXPENSE | CUSTOMER_PAYMENT | VENDOR_PAYMENT
+  referenceId     String?
+  accountId       String?
+  clientId        String?
+  vendorId        String?
+  debit           Float    @default(0)
+  credit          Float    @default(0)
+  amount          Float
+  description     String?
+  source          String?  @default("MANUAL")
+  externalId      String?
+  createdAt       DateTime @default(now())
+
+  company         Company  @relation(fields: [companyId], references: [id])
+  account         Account? @relation(fields: [accountId], references: [id])
+  client          Client?  @relation(fields: [clientId], references: [id])
+  vendor          Vendor?  @relation(fields: [vendorId], references: [id])
+  revenue         Revenue? @relation(fields: [referenceId], references: [id])
+  bill            Bill?    @relation(fields: [referenceId], references: [id])
 }
 
 model Employee {
@@ -231,14 +385,112 @@ model Expense {
   categoryId   String
   date         DateTime
   amount       Float
-  description   String?
+  description  String?
+  source       String?  @default("MANUAL")
+  externalId   String?
   documentUrl  String?
   documentName String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  company      Company           @relation(fields: [companyId], references: [id])
+  company      Company          @relation(fields: [companyId], references: [id])
   category     ExpenseCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+}
+
+model ImportJob {
+  id               String   @id @default(cuid())
+  companyId        String
+  uploadedBy       String
+  sourceType       String   // EXCEL | CSV | TALLY
+  fileName         String
+  fileType         String
+  s3Bucket         String?  // AWS S3 Bucket Name
+  s3Key            String?  // AWS S3 Object Key
+  status           String   @default("UPLOADED") // UPLOADED | PARSING | VALIDATING | READY_FOR_REVIEW | IMPORTING | COMPLETED | PARTIAL | FAILED | CANCELLED
+  totalRows        Int      @default(0)
+  validRows        Int      @default(0)
+  invalidRows      Int      @default(0)
+  duplicateRows    Int      @default(0)
+  successfulRows   Int      @default(0)
+  failedRows       Int      @default(0)
+  totalDebit       Float?   @default(0)
+  totalCredit      Float?   @default(0)
+  columnMapping    String?  // JSON string
+  reconciliation   String?  // JSON string
+  createdAt        DateTime @default(now())
+  startedAt        DateTime?
+  completedAt      DateTime?
+
+  company          Company     @relation(fields: [companyId], references: [id])
+  rows             ImportRow[]
+}
+
+model ImportRow {
+  id             String   @id @default(cuid())
+  importJobId    String
+  rowNumber      Int
+  rawContent     String   // JSON string of original uploaded row
+  normalizedData String? // JSON string of normalized record
+  status         String   @default("PENDING") // PENDING | VALID | INVALID | DUPLICATE | IMPORTED | FAILED
+  targetEntity   String?  // REVENUE | EXPENSE | CLIENT | VENDOR | BILL | PAYMENT
+  targetId       String?
+  errorMessage   String?
+
+  importJob      ImportJob     @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+  errors         ImportError[]
+}
+
+model ImportError {
+  id           String   @id @default(cuid())
+  importRowId  String
+  columnName   String?
+  errorCode    String
+  errorMessage String
+  rawText      String?
+
+  importRow    ImportRow @relation(fields: [importRowId], references: [id], onDelete: Cascade)
+}
+
+model Document {
+  id           String   @id @default(cuid())
+  companyId    String
+  fileName     String
+  fileType     String
+  fileSize     Int?
+  storageKey   String   // S3 Key or Storage path identifier
+  s3Bucket     String?  // AWS S3 Bucket Name
+  s3Key        String?  // AWS S3 Object Key
+  documentType String   @default("GENERAL") // INVOICE | BILL | RECEIPT | CONTRACT | OTHER
+  uploadedBy   String?
+  createdAt    DateTime @default(now())
+
+  company      Company        @relation(fields: [companyId], references: [id])
+  links        DocumentLink[]
+}
+
+model DocumentLink {
+  id         String   @id @default(cuid())
+  documentId String
+  entityType String   // CLIENT | REVENUE | BILL | CUSTOMER_PAYMENT | VENDOR_PAYMENT | EXPENSE | EMPLOYEE | VENDOR
+  entityId   String
+
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  companyId     String?
+  userId        String?
+  userName      String?
+  action        String   // CREATE | UPDATE | DELETE | REVERSE | IMPORT
+  entityType    String   // REVENUE | CUSTOMER_PAYMENT | BILL | VENDOR_PAYMENT | EXPENSE | VENDOR | IMPORT
+  entityId      String?
+  details       String?  // JSON detail summary
+  previousValue String? // JSON string
+  newValue      String?  // JSON string
+  createdAt     DateTime @default(now())
+
+  company       Company? @relation(fields: [companyId], references: [id])
 }
 
 // ============================================================

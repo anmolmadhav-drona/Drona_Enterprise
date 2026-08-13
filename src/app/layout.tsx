@@ -20,8 +20,13 @@ export const metadata: Metadata = {
   keywords: ["Drona", "multi-tenant", "ERP", "profitability", "revenue", "cost", "Next.js", "Prisma"],
   authors: [{ name: "Drona Enterprises" }],
   icons: {
-    icon: "/logo.svg",
-
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/logo.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
   },
 };
 
