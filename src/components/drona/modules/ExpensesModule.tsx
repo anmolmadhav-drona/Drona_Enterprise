@@ -397,7 +397,9 @@ function AddExpenseDialog({
   const [categoryId, setCategoryId] = useState('')
   const [customCategoryName, setCustomCategoryName] = useState('')
   const [customCategoryType, setCustomCategoryType] = useState<'OPERATIONAL' | 'ADMINISTRATIVE' | 'CAPITAL'>('OPERATIONAL')
-  const [date, setDate] = useState('')
+  const [date, setDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  )
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   
@@ -434,10 +436,6 @@ function AddExpenseDialog({
       }
     })()
   }, [open, effectiveCompanyId])
-
-  useEffect(() => {
-    if (open && !date) setDate(new Date().toISOString().slice(0, 10))
-  }, [open, date])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

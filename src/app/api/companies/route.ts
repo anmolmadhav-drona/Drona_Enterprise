@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     data: {
       email: emailToUse,
       name: `${name} Admin`,
-      passwordHash: hashPassword(password),
+      passwordHash: await hashPassword(password),
       role: 'COMPANY_ADMIN',
       companyId: createdCompany.id,
       active: true,

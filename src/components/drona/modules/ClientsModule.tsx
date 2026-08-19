@@ -941,11 +941,14 @@ function ClientDetailView({
 
   // Document Category Filter
   const [docCategoryFilter, setDocCategoryFilter] = useState<string>('all')
-
   const loadClientDetails = async () => {
     try {
       setLoading(true)
-      const res = await fetchJson<ClientDetailData>(`/api/clients/${clientId}`)
+
+      const res = await fetchJson<ClientDetailData>(
+        `/api/clients/${clientId}`
+      )
+
       setData(res)
       setError(null)
     } catch (e: any) {
@@ -954,10 +957,38 @@ function ClientDetailView({
       setLoading(false)
     }
   }
-
   useEffect(() => {
-    loadClientDetails()
-  }, [clientId])
+  let cancelled = false
+
+  const load = async () => {
+    try {
+      setLoading(true)
+
+      const res = await fetchJson<ClientDetailData>(
+        `/api/clients/${clientId}`
+      )
+
+      if (!cancelled) {
+        setData(res)
+        setError(null)
+      }
+    } catch (e: any) {
+      if (!cancelled) {
+        setError(e.message || 'Failed to load client details')
+      }
+    } finally {
+      if (!cancelled) {
+        setLoading(false)
+      }
+    }
+  }
+
+  void load()
+
+  return () => {
+    cancelled = true
+  }
+}, [clientId])
 
   // File Upload Handler (Converts file to base64 Data URL)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1502,24 +1533,53 @@ function ClientDetailView({
             </CardHeader>
             <CardContent className="p-6">
               {(() => {
-                if (!client.customFields) return <EmptyState title="No custom columns defined" desc="Add custom fields when creating or editing a client." icon={<Layers className="h-8 w-8 text-slate-400" />} />
+                if (!client.customFields) {
+                  return (
+                    <EmptyState
+                      title="No custom columns defined"
+                      desc="Add custom fields when creating or editing a client."
+                      icon={<Layers className="h-8 w-8 text-slate-400" />}
+                    />
+                  )
+                }
+
+                let entries: [string, unknown][] = []
+
                 try {
                   const parsed = JSON.parse(client.customFields)
-                  const entries = Object.entries(parsed)
-                  if (entries.length === 0) return <EmptyState title="No custom columns defined" desc="Add custom fields when creating or editing a client." icon={<Layers className="h-8 w-8 text-slate-400" />} />
-                  return (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                      {entries.map(([k, v]) => (
-                        <div key={k} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{k}</div>
-                          <div className="text-sm font-bold text-[#0B2148]">{String(v)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )
+                  entries = Object.entries(parsed)
                 } catch {
-                  return <EmptyState title="No custom columns defined" desc="Add custom fields when creating or editing a client." icon={<Layers className="h-8 w-8 text-slate-400" />} />
+                  entries = []
                 }
+
+                if (entries.length === 0) {
+                  return (
+                    <EmptyState
+                      title="No custom columns defined"
+                      desc="Add custom fields when creating or editing a client."
+                      icon={<Layers className="h-8 w-8 text-slate-400" />}
+                    />
+                  )
+                }
+
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {entries.map(([k, v]) => (
+                      <div
+                        key={k}
+                        className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1"
+                      >
+                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                          {k}
+                        </div>
+
+                        <div className="text-sm font-bold text-[#0B2148]">
+                          {String(v)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
               })()}
             </CardContent>
           </Card>

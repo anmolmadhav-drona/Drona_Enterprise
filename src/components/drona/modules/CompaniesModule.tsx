@@ -284,11 +284,16 @@ export function CompaniesModule() {
 
       {/* Edit Tenant Modal */}
       <EditTenantDialog
+        key={editingCompany?.id ?? 'edit-tenant'}
         company={editingCompany}
         open={editOpen}
         onOpenChange={setEditOpen}
         onUpdated={(updated) => {
-          setCompanies((prev) => prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)))
+          setCompanies((prev) =>
+            prev.map((item) =>
+              item.id === updated.id ? { ...item, ...updated } : item
+            )
+          )
         }}
       />
 
@@ -790,9 +795,9 @@ function EditTenantDialog({
   onOpenChange: (v: boolean) => void
   onUpdated: (c: Company) => void
 }) {
-  const [name, setName] = useState('')
-  const [code, setCode] = useState('')
-  const [status, setStatus] = useState('ACTIVE')
+  const [name, setName] = useState(company?.name ?? '')
+  const [code, setCode] = useState(company?.code ?? '')
+  const [status, setStatus] = useState(company?.status ?? 'ACTIVE')
   const [adminEmail, setAdminEmail] = useState('')
   const [adminPassword, setAdminPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -801,21 +806,16 @@ function EditTenantDialog({
 
   useEffect(() => {
     if (!open || !company) return
-    setName(company.name)
-    setCode(company.code)
-    setStatus(company.status)
-    setAdminPassword('')
-    setLoading(true)
 
-    // Fetch existing tenant details & admin email
-    fetchJson<{ company: Company; tenantAdmin: { email: string } | null }>(`/api/companies/${company.id}`)
+    fetchJson<{ company: Company; tenantAdmin: { email: string } | null }>(
+      `/api/companies/${company.id}`
+    )
       .then((data) => {
         if (data.tenantAdmin) {
           setAdminEmail(data.tenantAdmin.email)
         }
       })
       .catch(() => {})
-      .finally(() => setLoading(false))
   }, [open, company])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -966,10 +966,6 @@ function DeleteTenantDialog({
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-
-  useEffect(() => {
-    if (!open) setPassword('')
-  }, [open])
 
   async function handleDelete(e: React.FormEvent) {
     e.preventDefault()

@@ -88,32 +88,26 @@ export function ReportsModule() {
     params.set('to', pageTo)
 
     if (activeTab === 'profitability') {
-      setProfLoading(true)
       fetchJson<any>(`/api/reports/profitability?${params.toString()}`)
         .then((d) => active && setProfitabilityData(d))
         .catch(() => {})
         .finally(() => active && setProfLoading(false))
     } else if (activeTab === 'receivables') {
-      setRecLoading(true)
       fetchJson<any>(`/api/reports/receivables-aging`)
         .then((d) => active && setReceivablesData(d.report))
         .catch(() => {})
         .finally(() => active && setRecLoading(false))
     } else if (activeTab === 'payables') {
-      setPayLoading(true)
       fetchJson<any>(`/api/reports/payables-aging`)
         .then((d) => active && setPayablesData(d.report))
         .catch(() => {})
         .finally(() => active && setPayLoading(false))
     } else if (activeTab === 'cashflow') {
-      setCfLoading(true)
       fetchJson<any>(`/api/reports/cash-flow?${params.toString()}`)
         .then((d) => active && setCashFlowData(d.statement))
         .catch(() => {})
         .finally(() => active && setCfLoading(false))
     } else if (activeTab === 'ledger' && selectedPartnerId) {
-      setLedgerLoading(true)
-      setLedgerError(null)
       fetchJson<any>(`/api/reports/partner-ledger?partnerType=${partnerType}&partnerId=${selectedPartnerId}&${params.toString()}`)
         .then((d) => {
           if (active) {

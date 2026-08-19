@@ -9,17 +9,18 @@
  */
 import { PrismaClient } from '@prisma/client'
 import { randomUUID } from 'crypto'
+import argon2 from 'argon2'
 
 const db = new PrismaClient()
 
-// Simple deterministic password hash for demo only. NOT for production.
-function hashPassword(pw: string): string {
-  // Reverse + prefix marker so we can verify in the auth API without bcrypt.
-  return 'demo$' + Buffer.from(pw).reverse().toString('utf8')
+async function hashPassword(pw: string): Promise<string> {
+  return argon2.hash(pw, {
+    type: argon2.argon2id,
+  })
 }
 
 async function main() {
-  console.log('🌱 Seeding Drona Enterprises database...')
+  console.log('Seeding Drona Enterprises database...')
 
   // -------- Reference data --------
   const clientTypes = await db.$transaction([
@@ -74,32 +75,42 @@ async function main() {
   })
 
   // -------- Users (one per role) --------
-  const users = [
-    { name: 'Arjun Mehta', email: 'group.admin@drona.com', pw: 'admin123', role: 'GROUP_ADMIN', company: null },
-    { name: 'Priya Nair', email: 'logitech.admin@drona.com', pw: 'admin123', role: 'COMPANY_ADMIN', company: logitech.id },
-    { name: 'Rahul Sharma', email: 'valuechain.admin@drona.com', pw: 'admin123', role: 'COMPANY_ADMIN', company: valuechain.id },
-    { name: 'Sneha Verma', email: 'user.logitech@drona.com', pw: 'user123', role: 'STANDARD_USER', company: logitech.id },
-    { name: 'Karthik Rao', email: 'user.valuechain@drona.com', pw: 'user123', role: 'STANDARD_USER', company: valuechain.id },
-  ]
-  for (const u of users) {
-    const existing = await db.user.findUnique({ where: { email: u.email } })
-    if (!existing) {
-      await db.user.create({
-        data: {
-          name: u.name,
-          email: u.email,
-          passwordHash: hashPassword(u.pw),
-          role: u.role,
-          companyId: u.company,
-        },
-      })
-    } else {
-      await db.user.update({
-        where: { email: u.email },
-        data: { name: u.name, passwordHash: hashPassword(u.pw), role: u.role, companyId: u.company, active: true },
-      })
-    }
+const users = [
+  { name: 'Arjun Mehta', email: 'group.admin@drona.com', pw: 'admin123', role: 'GROUP_ADMIN', company: null },
+  { name: 'Priya Nair', email: 'logitech.admin@drona.com', pw: 'admin123', role: 'COMPANY_ADMIN', company: logitech.id },
+  { name: 'Rahul Sharma', email: 'valuechain.admin@drona.com', pw: 'admin123', role: 'COMPANY_ADMIN', company: valuechain.id },
+  { name: 'Sneha Verma', email: 'user.logitech@drona.com', pw: 'user123', role: 'STANDARD_USER', company: logitech.id },
+  { name: 'Karthik Rao', email: 'user.valuechain@drona.com', pw: 'user123', role: 'STANDARD_USER', company: valuechain.id },
+]
+
+for (const u of users) {
+  const existing = await db.user.findUnique({
+    where: { email: u.email },
+  })
+
+  if (!existing) {
+    await db.user.create({
+      data: {
+        name: u.name,
+        email: u.email,
+        passwordHash: await hashPassword(u.pw),
+        role: u.role,
+        companyId: u.company,
+      },
+    })
+  } else {
+    await db.user.update({
+      where: { email: u.email },
+      data: {
+        name: u.name,
+        passwordHash: await hashPassword(u.pw),
+        role: u.role,
+        companyId: u.company,
+        active: true,
+      },
+    })
   }
+}
 
   // -------- Drona Logitech: Clients --------
   const logitechClients = await Promise.all([

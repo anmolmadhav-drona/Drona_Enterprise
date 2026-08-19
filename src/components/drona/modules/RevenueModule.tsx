@@ -104,15 +104,18 @@ export function RevenueModule() {
   // Page-scoped Local Filters
   const [pageFrom, setPageFrom] = useState('')
   const [pageTo, setPageTo] = useState('')
-
   const isViewOnly = user?.role === 'STANDARD_USER'
-
   const loadRevenues = () => {
     setLoading(true)
+
     const params = new URLSearchParams()
+
     if (pageFrom) params.set('from', pageFrom)
     if (pageTo) params.set('to', pageTo)
-    fetchJson<{ revenues: Revenue[] }>(`/api/revenue?${params.toString()}`)
+
+    fetchJson<{ revenues: Revenue[] }>(
+      `/api/revenue?${params.toString()}`
+    )
       .then((d) => {
         setRevenues(d.revenues)
         setError(null)
@@ -120,9 +123,36 @@ export function RevenueModule() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }
-
   useEffect(() => {
-    loadRevenues()
+    let active = true
+
+    const load = async () => {
+      const params = new URLSearchParams()
+
+      if (pageFrom) params.set('from', pageFrom)
+      if (pageTo) params.set('to', pageTo)
+
+      try {
+        const data = await fetchJson<{ revenues: Revenue[] }>(
+          `/api/revenue?${params.toString()}`
+        )
+
+        if (!active) return
+
+        setRevenues(data.revenues)
+        setError(null)
+      } catch (e: any) {
+        if (!active) return
+
+        setError(e.message)
+      }
+    }
+
+    void load()
+
+    return () => {
+      active = false
+    }
   }, [pageFrom, pageTo])
 
   // Aggregate Client-wise Summaries
@@ -806,9 +836,13 @@ function AddRevenueDialog({
 }) {
   const [clients, setClients] = useState<ClientOption[]>([])
   const [clientId, setClientId] = useState('')
-  const [date, setDate] = useState('')
   const [dueDate, setDueDate] = useState('')
-  const [invoiceNo, setInvoiceNo] = useState('')
+  const [date, setDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  )
+  const [invoiceNo, setInvoiceNo] = useState(
+    () => `INV-${Date.now().toString(36).toUpperCase()}`
+  )
   const [description, setDescription] = useState('')
   const [gstPercent, setGstPercent] = useState('18')
 
@@ -826,8 +860,6 @@ function AddRevenueDialog({
 
   useEffect(() => {
     if (!open) return
-    setDate(new Date().toISOString().slice(0, 10))
-    setInvoiceNo(`INV-${Date.now().toString(36).toUpperCase()}`)
     ;(async () => {
       try {
         const { clients: list } = await fetchJson<{ clients: ClientOption[] }>('/api/clients')

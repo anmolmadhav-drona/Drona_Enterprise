@@ -5,6 +5,7 @@
 import { cookies } from 'next/headers'
 import { db } from '@/lib/db'
 import { randomUUID } from 'crypto'
+import argon2 from 'argon2'
 
 const SESSION_COOKIE = 'drona_session'
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12 // 12h
@@ -18,16 +19,21 @@ export type SessionUser = {
   company?: { id: string; name: string; code: string; type: string } | null
 }
 
-export function hashPassword(input: string): string {
-  const reversed = Buffer.from(input).reverse().toString('utf8')
-  return `demo$${reversed}`
+export async function hashPassword(password: string): Promise<string> {
+  return argon2.hash(password, {
+    type: argon2.argon2id,
+  })
 }
 
-function verifyPassword(input: string, hash: string): boolean {
-  if (!hash.startsWith('demo$')) return false
-  const stored = hash.slice(5)
-  const computed = Buffer.from(input).reverse().toString('utf8')
-  return stored === computed
+export async function verifyPassword(
+  password: string,
+  passwordHash: string
+): Promise<boolean> {
+  try {
+    return await argon2.verify(passwordHash, password)
+  } catch {
+    return false
+  }
 }
 
 export async function login(email: string, password: string): Promise<SessionUser | null> {
@@ -36,7 +42,9 @@ export async function login(email: string, password: string): Promise<SessionUse
     include: { company: true },
   })
   if (!user || !user.active) return null
-  if (!verifyPassword(password, user.passwordHash)) return null
+  if (!(await verifyPassword(password, user.passwordHash))) {
+    return null
+  }
 
   const token = randomUUID()
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS)

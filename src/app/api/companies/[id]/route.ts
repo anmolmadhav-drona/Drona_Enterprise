@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getCurrentUser, hashPassword } from '@/lib/auth'
-
-function verifyPassword(input: string, hash: string): boolean {
-  if (!hash.startsWith('demo$')) return false
-  const stored = hash.slice(5)
-  const computed = Buffer.from(input).reverse().toString('utf8')
-  return stored === computed
-}
+import {
+  getCurrentUser,
+  hashPassword,
+  verifyPassword,
+} from '@/lib/auth'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser()
@@ -77,7 +74,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         where: { id: adminUser.id },
         data: {
           ...(adminEmail ? { email: adminEmail.toLowerCase().trim() } : {}),
-          ...(adminPassword ? { passwordHash: hashPassword(adminPassword.trim()) } : {}),
+          ...(adminPassword
+            ? { passwordHash: await hashPassword(adminPassword.trim()) }
+            : {}),
         },
       })
     } else if (adminEmail) {
@@ -86,7 +85,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         data: {
           email: adminEmail.toLowerCase().trim(),
           name: `${name || company.name} Admin`,
-          passwordHash: hashPassword(password),
+          passwordHash: await hashPassword(password),
           role: 'COMPANY_ADMIN',
           companyId: company.id,
           active: true,
@@ -127,14 +126,20 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   
   let isPasswordValid = false
   if (tenantAdmin) {
-    isPasswordValid = verifyPassword(password.trim(), tenantAdmin.passwordHash)
+    isPasswordValid = await verifyPassword(
+      password.trim(),
+      tenantAdmin.passwordHash
+)
   }
   
   // Fallback: verify against group admin password if tenant admin has no user or password mismatch
   if (!isPasswordValid) {
     const groupAdminUser = await db.user.findUnique({ where: { id: user.id } })
     if (groupAdminUser) {
-      isPasswordValid = verifyPassword(password.trim(), groupAdminUser.passwordHash)
+      isPasswordValid = await verifyPassword(
+        password.trim(),
+        groupAdminUser.passwordHash
+)
     }
   }
 

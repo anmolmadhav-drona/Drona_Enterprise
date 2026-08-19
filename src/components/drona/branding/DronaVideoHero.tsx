@@ -1,21 +1,34 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useSyncExternalStore } from 'react'
 import { DronaNetworkPattern } from './DronaNetworkPattern'
 import { DronaLogoMark } from './DronaLogoMark'
 import { ShieldCheck, Cpu, Network, TrendingUp } from 'lucide-react'
 
+const subscribeToReducedMotion = (callback: () => void) => {
+  const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+
+  mediaQuery.addEventListener('change', callback)
+
+  return () => {
+    mediaQuery.removeEventListener('change', callback)
+  }
+}
+
+const getReducedMotion = () => {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+const getServerReducedMotion = () => false
+
 export function DronaVideoHero({ className = '' }: { className?: string }) {
   const [videoError, setVideoError] = useState(false)
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-    setPrefersReducedMotion(mediaQuery.matches)
-    const handler = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches)
-    mediaQuery.addEventListener('change', handler)
-    return () => mediaQuery.removeEventListener('change', handler)
-  }, [])
+  
+  const prefersReducedMotion = useSyncExternalStore(
+  subscribeToReducedMotion,
+  getReducedMotion,
+  getServerReducedMotion
+)
 
   return (
     <div className={`relative rounded-2xl overflow-hidden border border-[#08B6D8]/40 bg-[#0B2148] shadow-2xl drona-glow ${className}`}>
