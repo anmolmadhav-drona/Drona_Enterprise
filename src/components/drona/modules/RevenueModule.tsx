@@ -81,7 +81,12 @@ export function RevenueModule() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [addOpen, setAddOpen] = useState(false)
-  const [previewDoc, setPreviewDoc] = useState<{ name: string; url: string; invoiceNo: string } | null>(null)
+  const [previewDoc, setPreviewDoc] = useState<{
+    name: string
+    url: string
+    invoiceNo: string
+    fileType?: string | null
+  } | null>(null)
   const [viewInvoice, setViewInvoice] = useState<Revenue | null>(null)
 
   // Payment Recording State
@@ -507,13 +512,25 @@ export function RevenueModule() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() =>
-                                  setPreviewDoc({
-                                    name: r.documentName || `Invoice ${r.invoiceNo}`,
-                                    url: r.documentUrl!,
-                                    invoiceNo: r.invoiceNo,
-                                  })
-                                }
+                                onClick={async () => {
+                                  try {
+                                    const response = await fetch(`/api/revenue/${r.id}/download`)
+                                    const data = await response.json()
+
+                                    if (!response.ok) {
+                                      throw new Error(data.error || 'Failed to load attachment')
+                                    }
+
+                                    setPreviewDoc({
+                                      name: r.documentName || `Invoice ${r.invoiceNo}`,
+                                      url: data.url,
+                                      fileType: data.fileType,
+                                      invoiceNo: r.invoiceNo,
+                                    })
+                                  } catch (err: any) {
+                                    toast.error(err.message || 'Failed to load attachment')
+                                  }
+                                }}
                                 className="h-7 text-[11px] border-[#08B6D8]/40 bg-[#E8F8FC]/50 text-[#0B2148] font-semibold gap-1 rounded-lg"
                               >
                                 <ImageIcon className="h-3.5 w-3.5 text-[#08B6D8]" /> File
@@ -779,13 +796,13 @@ export function RevenueModule() {
             </DialogHeader>
 
             <div className="flex-1 overflow-auto py-4 flex items-center justify-center bg-slate-900 rounded-xl my-2 p-4 min-h-[350px]">
-              {previewDoc.url.startsWith('data:image/') || previewDoc.url.startsWith('http') || previewDoc.url.startsWith('/') || previewDoc.url.endsWith('.png') || previewDoc.url.endsWith('.jpg') || previewDoc.url.endsWith('.jpeg') || previewDoc.url.endsWith('.gif') ? (
+              {previewDoc.fileType?.startsWith('image/') ? (
                 <img
                   src={previewDoc.url}
                   alt={previewDoc.name}
                   className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-2xl"
                 />
-              ) : previewDoc.url.startsWith('data:application/pdf') ? (
+              ) : previewDoc.fileType === 'application/pdf' ? (
                 <iframe
                   src={previewDoc.url}
                   title={previewDoc.name}
@@ -852,7 +869,7 @@ function AddRevenueDialog({
   ])
 
   // File upload state
-  const [documentUrl, setDocumentUrl] = useState<string | null>(null)
+  const [documentFile, setDocumentFile] = useState<File | null>(null)
   const [documentName, setDocumentName] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -913,13 +930,23 @@ function AddRevenueDialog({
     const file = e.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      setDocumentUrl(reader.result as string)
-      setDocumentName(file.name)
-      toast.success(`Supporting document "${file.name}" attached!`)
+    const allowedTypes = [
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+    ]
+
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Only PDF and image files are allowed')
+      e.target.value = ''
+      return
     }
-    reader.readAsDataURL(file)
+
+    setDocumentFile(file)
+    setDocumentName(file.name)
+
+    toast.success(`Supporting document "${file.name}" attached!`)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -931,24 +958,37 @@ function AddRevenueDialog({
 
     setSubmitting(true)
     try {
-      const { revenue } = await fetchJson<{ revenue: Revenue }>('/api/revenue', {
-        method: 'POST',
-        body: JSON.stringify({
-          clientId,
-          date,
-          dueDate: dueDate || undefined,
-          invoiceNo,
-          description: description.trim() || undefined,
-          quantity: 1,
-          rate: subtotal,
-          subtotal,
-          taxAmount,
-          amount: grandTotal,
-          items,
-          documentUrl: documentUrl || undefined,
-          documentName: documentName || undefined,
-        }),
-      })
+      const formData = new FormData()
+
+      formData.append('clientId', clientId)
+      formData.append('date', date)
+      formData.append('invoiceNo', invoiceNo)
+      formData.append('quantity', '1')
+      formData.append('rate', String(subtotal))
+      formData.append('subtotal', String(subtotal))
+      formData.append('taxAmount', String(taxAmount))
+      formData.append('amount', String(grandTotal))
+      formData.append('items', JSON.stringify(items))
+
+      if (dueDate) {
+        formData.append('dueDate', dueDate)
+      }
+
+      if (description.trim()) {
+        formData.append('description', description.trim())
+      }
+
+      if (documentFile) {
+        formData.append('file', documentFile)
+      }
+
+      const { revenue } = await fetchJson<{ revenue: Revenue }>(
+        '/api/revenue',
+        {
+          method: 'POST',
+          body: formData,
+        }
+      )
 
       toast.success(`Invoice #${invoiceNo} created successfully!`)
       onCreated(revenue)

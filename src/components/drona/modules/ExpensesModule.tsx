@@ -56,7 +56,7 @@ export function ExpensesModule() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [addOpen, setAddOpen] = useState(false)
-  const [previewDoc, setPreviewDoc] = useState<{ name: string; url: string; category?: string } | null>(null)
+  const [previewDoc, setPreviewDoc] = useState<{ name: string; url: string; category?: string; fileType?: string } | null>(null)
 
   // Page-scoped Local Filters
   const [pageFrom, setPageFrom] = useState('2024-04-01')
@@ -289,13 +289,25 @@ export function ExpensesModule() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() =>
-                              setPreviewDoc({
-                                name: e.documentName || `${e.category?.name || 'Expense'} Receipt`,
-                                url: e.documentUrl!,
-                                category: e.category?.name,
-                              })
-                            }
+                            onClick={async () => {
+                              try {
+                                const response = await fetch(`/api/expenses/${e.id}/download`)
+                                const data = await response.json()
+
+                                if (!response.ok) {
+                                  throw new Error(data.error || 'Failed to load receipt')
+                                }
+
+                                setPreviewDoc({
+                                  name: e.documentName || `${e.category?.name || 'Expense'} Receipt`,
+                                  url: data.url,
+                                  category: e.category?.name,
+                                  fileType: data.fileType,
+                                })
+                              } catch (err: any) {
+                                toast.error(err.message || 'Failed to load receipt')
+                              }
+                            }}
                             className="h-7 text-[11px] border-[#08B6D8]/40 bg-[#E8F8FC]/50 hover:bg-[#08B6D8]/20 text-[#0B2148] font-semibold gap-1.5 rounded-lg"
                           >
                             <ImageIcon className="h-3.5 w-3.5 text-[#08B6D8]" /> View Receipt
@@ -338,16 +350,24 @@ export function ExpensesModule() {
             </DialogHeader>
 
             <div className="flex-1 overflow-auto py-4 flex items-center justify-center bg-slate-900 rounded-xl my-2 p-4 min-h-[300px]">
-              {previewDoc.url.startsWith('data:image/') || previewDoc.url.startsWith('http') || previewDoc.url.startsWith('/') ? (
+              {previewDoc.fileType?.startsWith('image/') ? (
                 <img
                   src={previewDoc.url}
                   alt={previewDoc.name}
                   className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-2xl"
                 />
+              ) : previewDoc.fileType === 'application/pdf' ? (
+                <iframe
+                  src={previewDoc.url}
+                  title={previewDoc.name}
+                  className="w-full h-[60vh] rounded-lg border-0 bg-white"
+                />
               ) : (
                 <div className="text-center text-white space-y-3">
                   <FileText className="h-16 w-16 mx-auto text-[#08B6D8]" />
-                  <p className="text-sm font-semibold">Supporting Document Attached</p>
+                  <p className="text-sm font-semibold">
+                    Supporting Document Attached
+                  </p>
                   <a
                     href={previewDoc.url}
                     download={previewDoc.name}
@@ -404,7 +424,7 @@ function AddExpenseDialog({
   const [description, setDescription] = useState('')
   
   // Supporting Document / Receipt Upload States
-  const [documentUrl, setDocumentUrl] = useState<string | null>(null)
+  const [documentFile, setDocumentFile] = useState<File | null>(null)
   const [documentName, setDocumentName] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -441,19 +461,32 @@ function AddExpenseDialog({
     const file = e.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      setDocumentUrl(reader.result as string)
-      setDocumentName(file.name)
-      toast.success(`Supporting receipt "${file.name}" attached!`)
+    const allowedTypes = [
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+    ]
+
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Only PDF and image files are allowed')
+      e.target.value = ''
+      return
     }
-    reader.readAsDataURL(file)
+
+    setDocumentFile(file)
+    setDocumentName(file.name)
+
+    toast.success(`Supporting document "${file.name}" attached!`)
   }
 
   const removeFile = () => {
-    setDocumentUrl(null)
+    setDocumentFile(null)
     setDocumentName(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -483,19 +516,31 @@ function AddExpenseDialog({
         toast.success(`Custom category "${createdCat.name}" added to database!`)
       }
 
-      const body: Record<string, unknown> = {
-        categoryId: finalCategoryId,
-        date,
-        amount: Number(amount),
-        description: description.trim() || undefined,
-        documentUrl: documentUrl || undefined,
-        documentName: documentName || undefined,
+      const formData = new FormData()
+
+      formData.append('categoryId', finalCategoryId)
+      formData.append('date', date)
+      formData.append('amount', String(Number(amount)))
+
+      if (description.trim()) {
+        formData.append('description', description.trim())
       }
-      if (isGroupAdmin) body.companyId = companyId
-      const { expense } = await fetchJson<{ expense: Expense }>('/api/expenses', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      })
+
+      if (isGroupAdmin && companyId) {
+        formData.append('companyId', companyId)
+      }
+
+      if (documentFile) {
+        formData.append('file', documentFile)
+      }
+
+      const { expense } = await fetchJson<{ expense: Expense }>(
+        '/api/expenses',
+        {
+          method: 'POST',
+          body: formData,
+        }
+      )
       toast.success('Expense recorded!')
       onCreated(expense)
       onOpenChange(false)
@@ -504,7 +549,7 @@ function AddExpenseDialog({
       setCustomCategoryName('')
       setAmount('')
       setDescription('')
-      setDocumentUrl(null)
+      setDocumentFile(null)
       setDocumentName(null)
     } catch (err: any) {
       toast.error(err.message || 'Failed to record expense')
@@ -633,7 +678,7 @@ function AddExpenseDialog({
               className="hidden"
             />
 
-            {!documentUrl ? (
+            {!documentFile ? (
               <div
                 onClick={() => fileInputRef.current?.click()}
                 className="border border-dashed border-slate-300 hover:border-[#08B6D8] bg-slate-50 hover:bg-[#E8F8FC]/30 rounded-xl p-3 text-center cursor-pointer transition flex items-center justify-center gap-2 text-slate-500 text-xs"
@@ -644,8 +689,12 @@ function AddExpenseDialog({
             ) : (
               <div className="flex items-center justify-between bg-[#E8F8FC]/60 border border-[#08B6D8]/30 rounded-xl p-2.5 px-3">
                 <div className="flex items-center gap-2 text-xs truncate max-w-[80%]">
-                  {documentUrl.startsWith('data:image/') ? (
-                    <img src={documentUrl} alt="Thumbnail" className="h-7 w-7 rounded object-cover border border-slate-200 shrink-0" />
+                  {documentFile.type.startsWith('image/') ? (
+                    <img
+                      src={URL.createObjectURL(documentFile)}
+                      alt="Thumbnail"
+                      className="h-7 w-7 rounded object-cover border border-slate-200 shrink-0"
+                    />
                   ) : (
                     <FileCheck className="h-4 w-4 text-[#08B6D8] shrink-0" />
                   )}

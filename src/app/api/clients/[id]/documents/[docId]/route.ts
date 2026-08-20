@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, getAccessibleCompanyIds } from '@/lib/auth'
+import { deleteFromS3 } from '@/lib/storage/s3'
 
 export async function DELETE(
   req: NextRequest,
@@ -25,9 +26,20 @@ export async function DELETE(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  await db.clientDocument.delete({
-    where: { id: docId },
-  })
+  try {
+    await deleteFromS3(document.fileUrl)
 
-  return NextResponse.json({ success: true })
+    await db.clientDocument.delete({
+      where: { id: docId },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error('Failed to delete document from S3:', error)
+
+    return NextResponse.json(
+      { error: error.message || 'Failed to delete document' },
+      { status: 500 }
+    )
+  }
 }

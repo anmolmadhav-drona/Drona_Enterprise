@@ -1,0 +1,15 @@
+warning: in the working copy of 'src/app/api/clients/[id]/documents/[docId]/route.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/api/clients/[id]/documents/route.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/api/expenses/route.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/app/api/revenue/route.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/drona/modules/ClientsModule.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/drona/modules/ExpensesModule.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/drona/modules/RevenueModule.tsx', LF will be replaced by CRLF the next time Git touches it
+ .../api/clients/[id]/documents/[docId]/route.ts    |  20 [32m+[m[31m-[m
+ src/app/api/clients/[id]/documents/route.ts        | 108 [32m++++++[m[31m--[m
+ src/app/api/expenses/route.ts                      | 118 [32m+++++++[m[31m-[m
+ src/app/api/revenue/route.ts                       | 171 [32m+++++++++[m[31m---[m
+ src/components/drona/modules/ClientsModule.tsx     | 307 [32m++++++++++++++++[m[31m-----[m
+ src/components/drona/modules/ExpensesModule.tsx    | 119 [32m+++++[m[31m---[m
+ src/components/drona/modules/RevenueModule.tsx     | 110 [32m+++++[m[31m---[m
+ 7 files changed, 748 insertions(+), 205 deletions(-)

@@ -934,10 +934,15 @@ function ClientDetailView({
   // Document Upload States
   const [uploadCategory, setUploadCategory] = useState('Invoice')
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState({
+    current: 0,
+    total: 0,
+  })
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Document Lightbox Preview Modal State
   const [previewDoc, setPreviewDoc] = useState<ClientDocument | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
   // Document Category Filter
   const [docCategoryFilter, setDocCategoryFilter] = useState<string>('all')
@@ -990,41 +995,125 @@ function ClientDetailView({
   }
 }, [clientId])
 
-  // File Upload Handler (Converts file to base64 Data URL)
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+const getDocumentUrl = async (docId: string) => {
+  const response = await fetch(
+    `/api/clients/${clientId}/documents/${docId}/download`
+  )
 
-    setUploading(true)
-    try {
-      const reader = new FileReader()
-      reader.onload = async () => {
-        const fileUrl = reader.result as string
-        await fetchJson(`/api/clients/${clientId}/documents`, {
-          method: 'POST',
-          body: JSON.stringify({
-            name: file.name,
-            category: uploadCategory,
-            fileUrl,
-            fileType: file.type || 'image/png',
-            fileSize: file.size,
-          }),
-        })
-        toast.success(`Document "${file.name}" uploaded successfully!`)
-        loadClientDetails()
-      }
-      reader.onerror = () => {
-        toast.error('Failed to read file')
-      }
-      reader.readAsDataURL(file)
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to upload document')
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to get document URL')
   }
 
+  return data.url as string
+}
+
+  // File Upload Handler
+const handleFileUpload = async (
+  e: React.ChangeEvent<HTMLInputElement>
+) => {
+  const files = Array.from(e.target.files || [])
+  if (files.length === 0) return
+
+  const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25 MB
+
+  const validFiles = files.filter((file) => {
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error(
+        `"${file.name}" exceeds the 25 MB file size limit`
+      )
+      return false
+    }
+
+    return true
+  })
+
+  if (validFiles.length === 0) {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+    return
+  }
+
+  setUploading(true)
+  setUploadProgress({
+    current: 0,
+    total: validFiles.length,
+  })
+
+  let uploadedCount = 0
+  let failedCount = 0
+
+  try {
+    for (const file of validFiles) {
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('category', uploadCategory)
+
+        const response = await fetch(
+          `/api/clients/${clientId}/documents`,
+          {
+            method: 'POST',
+            body: formData,
+          }
+        )
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(
+            data.error || 'Failed to upload document'
+          )
+        }
+
+        uploadedCount++
+      } catch (error: any) {
+        failedCount++
+
+        toast.error(
+          `${file.name}: ${
+            error.message || 'Upload failed'
+          }`
+        )
+      }
+
+      setUploadProgress((prev) => ({
+        ...prev,
+        current: prev.current + 1,
+      }))
+    }
+
+    if (uploadedCount > 0) {
+      toast.success(
+        `${uploadedCount} document${
+          uploadedCount > 1 ? 's' : ''
+        } uploaded successfully!`
+      )
+    }
+
+    if (failedCount > 0) {
+      toast.error(
+        `${failedCount} document${
+          failedCount > 1 ? 's' : ''
+        } failed to upload`
+      )
+    }
+
+    await loadClientDetails()
+  } finally {
+    setUploading(false)
+    setUploadProgress({
+      current: 0,
+      total: 0,
+    })
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+}
   const handleDeleteDocument = async (docId: string, docName: string) => {
     if (!confirm(`Are you sure you want to delete "${docName}"?`)) return
     try {
@@ -1249,6 +1338,7 @@ function ClientDetailView({
                     ref={fileInputRef}
                     type="file"
                     accept="image/*,.pdf,.doc,.docx"
+                    multiple
                     onChange={handleFileUpload}
                     className="hidden"
                   />
@@ -1258,8 +1348,15 @@ function ClientDetailView({
                     disabled={uploading}
                     className="bg-[#0B2148] hover:bg-[#102B63] text-white text-xs font-semibold h-9 px-4 rounded-xl shadow-sm gap-2 shrink-0"
                   >
-                    {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus className="h-4 w-4 text-[#08B6D8]" />}
-                    {uploading ? 'Uploading...' : 'Select File to Upload'}
+                    {uploading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FilePlus className="h-4 w-4 text-[#08B6D8]" />
+                    )}
+
+                    {uploading
+                      ? `Uploading ${uploadProgress.current}/${uploadProgress.total}...`
+                      : 'Select Files to Upload'}
                   </Button>
                 </div>
               </div>
@@ -1301,7 +1398,7 @@ function ClientDetailView({
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {filteredDocs.map((doc) => {
-                  const isImage = doc.fileType.startsWith('image/') || doc.fileUrl.startsWith('data:image/')
+                  const isImage = doc.fileType.startsWith('image/')
                   return (
                     <Card
                       key={doc.id}
@@ -1309,15 +1406,24 @@ function ClientDetailView({
                     >
                       {/* Image Thumbnail Preview */}
                       <div
-                        onClick={() => setPreviewDoc(doc)}
+                        onClick={async () => {
+                          try {
+                            const url = await getDocumentUrl(doc.id)
+                            setPreviewUrl(url)
+                            setPreviewDoc(doc)
+                          } catch (err: any) {
+                            toast.error(err.message || 'Failed to open document')
+                          }
+                        }}
                         className="h-40 bg-slate-100 relative cursor-pointer overflow-hidden flex items-center justify-center group-hover:opacity-95 transition"
                       >
                         {isImage ? (
-                          <img
-                            src={doc.fileUrl}
-                            alt={doc.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
+                          <div className="flex flex-col items-center gap-2 text-slate-400">
+                            <FileText className="h-12 w-12" />
+                            <span className="text-[10px] uppercase tracking-wider font-bold">
+                              IMAGE
+                            </span>
+                          </div>
                         ) : (
                           <div className="flex flex-col items-center gap-2 text-slate-400">
                             <FileText className="h-12 w-12" />
@@ -1348,7 +1454,15 @@ function ClientDetailView({
                         {/* Action Buttons */}
                         <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                           <Button
-                            onClick={() => setPreviewDoc(doc)}
+                            onClick={async () => {
+                              try {
+                                const url = await getDocumentUrl(doc.id)
+                                setPreviewUrl(url)
+                                setPreviewDoc(doc)
+                              } catch (err: any) {
+                                toast.error(err.message || 'Failed to open document')
+                              }
+                            }}
                             size="sm"
                             variant="outline"
                             className="h-7 text-[11px] border-slate-200 hover:bg-[#08B6D8]/10 hover:text-[#0B2148] gap-1 px-2.5 rounded-lg font-semibold"
@@ -1357,14 +1471,20 @@ function ClientDetailView({
                           </Button>
 
                           <div className="flex items-center gap-1">
-                            <a
-                              href={doc.fileUrl}
-                              download={doc.name}
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const url = await getDocumentUrl(doc.id)
+                                  window.open(url, '_blank', 'noopener,noreferrer')
+                                } catch (err: any) {
+                                  toast.error(err.message || 'Failed to download document')
+                                }
+                              }}
                               className="p-1.5 text-slate-400 hover:text-[#0B2148] rounded-lg hover:bg-slate-100 transition"
                               title="Download File"
                             >
                               <Download className="h-3.5 w-3.5" />
-                            </a>
+                            </button>
                             {!isViewOnly && (
                               <button
                                 onClick={() => handleDeleteDocument(doc.id, doc.name)}
@@ -1588,53 +1708,104 @@ function ClientDetailView({
 
       {/* View Document Lightbox / Modal Viewer */}
       {previewDoc && (
-        <Dialog open={!!previewDoc} onOpenChange={() => setPreviewDoc(null)}>
+        <Dialog
+          open={!!previewDoc}
+          onOpenChange={() => {
+            setPreviewDoc(null)
+            setPreviewUrl(null)
+          }}
+        >
           <DialogContent className="sm:max-w-4xl max-h-[90vh] p-6 rounded-2xl flex flex-col">
             <DialogHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <DialogTitle className="text-base font-bold text-[#0B2148] flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-[#08B6D8]" /> {previewDoc.name}
+                  <FileText className="h-5 w-5 text-[#08B6D8]" />
+                  {previewDoc.name}
                 </DialogTitle>
+
                 <DialogDescription className="text-xs text-slate-500 mt-0.5 flex items-center gap-3">
-                  <span>Category: <b>{previewDoc.category}</b></span>
+                  <span>
+                    Category: <b>{previewDoc.category}</b>
+                  </span>
                   <span>•</span>
-                  <span>Uploaded: <b>{new Date(previewDoc.createdAt).toLocaleDateString()}</b></span>
+                  <span>
+                    Uploaded:{' '}
+                    <b>
+                      {new Date(previewDoc.createdAt).toLocaleDateString()}
+                    </b>
+                  </span>
                 </DialogDescription>
               </div>
             </DialogHeader>
 
             <div className="flex-1 overflow-auto py-4 flex items-center justify-center bg-slate-900 rounded-xl my-2 p-4 min-h-[350px]">
-              {previewDoc.fileType.startsWith('image/') || previewDoc.fileUrl.startsWith('data:image/') ? (
-                <img
-                  src={previewDoc.fileUrl}
-                  alt={previewDoc.name}
-                  className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-2xl"
-                />
+              {previewDoc.fileType.startsWith('image/') ? (
+                previewUrl ? (
+                  <img
+                    src={previewUrl}
+                    alt={previewDoc.name}
+                    className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-2xl"
+                  />
+                ) : (
+                  <div className="text-center text-white">
+                    <Loader2 className="h-8 w-8 mx-auto animate-spin text-[#08B6D8]" />
+                    <p className="text-sm mt-3">Loading document...</p>
+                  </div>
+                )
               ) : (
                 <div className="text-center text-white space-y-3">
                   <FileText className="h-16 w-16 mx-auto text-[#08B6D8]" />
-                  <p className="text-sm font-semibold">Document preview not directly embeddable</p>
-                  <a
-                    href={previewDoc.fileUrl}
-                    download={previewDoc.name}
+
+                  <p className="text-sm font-semibold">
+                    Document preview not directly embeddable
+                  </p>
+
+                  <button
+                    onClick={async () => {
+                      try {
+                        const url = await getDocumentUrl(previewDoc.id)
+                        window.open(url, '_blank', 'noopener,noreferrer')
+                      } catch (err: any) {
+                        toast.error(
+                          err.message || 'Failed to download document'
+                        )
+                      }
+                    }}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-[#08B6D8] text-[#081B3A] rounded-xl font-bold text-xs"
                   >
-                    <Download className="h-4 w-4" /> Download Document
-                  </a>
+                    <Download className="h-4 w-4" />
+                    Download Document
+                  </button>
                 </div>
               )}
             </div>
 
             <DialogFooter className="border-t border-slate-100 pt-3 flex items-center justify-between sm:justify-between">
-              <a
-                href={previewDoc.fileUrl}
-                download={previewDoc.name}
+              <button
+                onClick={async () => {
+                  try {
+                    const url = await getDocumentUrl(previewDoc.id)
+                    window.open(url, '_blank', 'noopener,noreferrer')
+                  } catch (err: any) {
+                    toast.error(
+                      err.message || 'Failed to download document'
+                    )
+                  }
+                }}
                 className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#0B2148] text-white rounded-xl text-xs font-semibold hover:bg-[#102B63] transition"
               >
-                <Download className="h-4 w-4 text-[#08B6D8]" /> Download High-Res File
-              </a>
+                <Download className="h-4 w-4 text-[#08B6D8]" />
+                Download High-Res File
+              </button>
 
-              <Button variant="outline" onClick={() => setPreviewDoc(null)} className="h-8 text-xs">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPreviewDoc(null)
+                  setPreviewUrl(null)
+                }}
+                className="h-8 text-xs"
+              >
                 Close Preview
               </Button>
             </DialogFooter>
