@@ -17,6 +17,7 @@ export type ModuleKey =
   | 'companies'
   | 'clients'
   | 'revenue'
+  | 'bills'
   | 'employees'
   | 'allocations'
   | 'expenses'
@@ -58,15 +59,25 @@ export const useApp = create<State>((set) => ({
   setFilter: (patch) => set(patch),
 }))
 
-export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+export async function fetchJson<T>(
+  url: string,
+  init?: RequestInit
+): Promise<T> {
+  const isFormData = init?.body instanceof FormData
+
   const res = await fetch(url, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
     ...init,
+    headers: {
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+      ...init?.headers,
+    },
   })
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `Request failed: ${res.status}`)
   }
+
   return res.json()
 }

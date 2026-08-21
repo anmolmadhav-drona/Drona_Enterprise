@@ -24,6 +24,7 @@ import { DashboardModule } from './modules/DashboardModule'
 import { CompaniesModule } from './modules/CompaniesModule'
 import { ClientsModule } from './modules/ClientsModule'
 import { RevenueModule } from './modules/RevenueModule'
+import { BillsModule } from './modules/BillsModule'
 import { EmployeesModule } from './modules/EmployeesModule'
 import { AllocationsModule } from './modules/AllocationsModule'
 import { ExpensesModule } from './modules/ExpensesModule'
@@ -60,9 +61,34 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: 'FINANCIALS',
     items: [
-      { key: 'revenue', label: 'Revenue', icon: IndianRupee, desc: 'Invoices & Billing', roles: ['GROUP_ADMIN', 'COMPANY_ADMIN', 'STANDARD_USER'] },
-      { key: 'allocations', label: 'Allocations', icon: ArrowLeftRight, desc: 'Workforce to Client %', roles: ['GROUP_ADMIN', 'COMPANY_ADMIN', 'STANDARD_USER'] },
-      { key: 'expenses', label: 'Expenses', icon: Receipt, desc: 'Operational Costs', roles: ['GROUP_ADMIN', 'COMPANY_ADMIN', 'STANDARD_USER'] },
+      {
+        key: 'revenue',
+        label: 'Revenue',
+        icon: IndianRupee,
+        desc: 'Invoices & Billing',
+        roles: ['GROUP_ADMIN', 'COMPANY_ADMIN', 'STANDARD_USER']
+      },
+      {
+        key: 'bills',
+        label: 'Bills',
+        icon: Receipt,
+        desc: 'Vendor Bills & Payables',
+        roles: ['GROUP_ADMIN', 'COMPANY_ADMIN', 'STANDARD_USER']
+      },
+      {
+        key: 'allocations',
+        label: 'Allocations',
+        icon: ArrowLeftRight,
+        desc: 'Workforce to Client %',
+        roles: ['GROUP_ADMIN', 'COMPANY_ADMIN', 'STANDARD_USER']
+      },
+      {
+        key: 'expenses',
+        label: 'Expenses',
+        icon: Receipt,
+        desc: 'Operational Costs',
+        roles: ['GROUP_ADMIN', 'COMPANY_ADMIN', 'STANDARD_USER']
+      },
     ]
   },
   {
@@ -360,6 +386,7 @@ function ModuleHost({ moduleKey }: { moduleKey: ModuleKey }) {
     case 'companies': return <CompaniesModule />
     case 'clients': return <ClientsModule />
     case 'revenue': return <RevenueModule />
+    case 'bills': return <BillsModule />
     case 'employees': return <EmployeesModule />
     case 'allocations': return <AllocationsModule />
     case 'expenses': return <ExpensesModule />

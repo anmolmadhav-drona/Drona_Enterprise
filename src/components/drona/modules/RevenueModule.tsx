@@ -132,6 +132,8 @@ export function RevenueModule() {
     let active = true
 
     const load = async () => {
+      setLoading(true)
+
       const params = new URLSearchParams()
 
       if (pageFrom) params.set('from', pageFrom)
@@ -150,6 +152,10 @@ export function RevenueModule() {
         if (!active) return
 
         setError(e.message)
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
       }
     }
 
@@ -656,7 +662,9 @@ export function RevenueModule() {
       <AddRevenueDialog
         open={addOpen}
         onOpenChange={setAddOpen}
-        onCreated={() => loadRevenues()}
+        onCreated={(revenue) => {
+          setRevenues((prev) => [revenue, ...prev])
+        }}
       />
 
       {/* Record Payment Dialog */}

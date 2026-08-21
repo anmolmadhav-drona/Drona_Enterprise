@@ -26,21 +26,48 @@ export type VendorPaymentInput = {
   notes?: string
   source?: string
   externalId?: string
+
+  documentKey?: string
+  documentName?: string
+  documentType?: string
+  documentSize?: number
 }
 
 export class BillService {
   /**
-   * Creates a new Vendor Bill and logs a Financial Transaction (Credit Supplier Payable).
+   * Creates a new Vendor Bill and logs a Financial Transaction
+   * (Credit Supplier Payable).
    */
-  static async createBill(input: BillInput, userId?: string, userName?: string) {
-    const { companyId, vendorId, billNumber, billDate, dueDate, subtotal, taxAmount, totalAmount, description, source, externalId, documentUrl, documentName } = input
+  static async createBill(
+    input: BillInput,
+    userId?: string,
+    userName?: string
+  ) {
+    const {
+      companyId,
+      vendorId,
+      billNumber,
+      billDate,
+      dueDate,
+      subtotal,
+      taxAmount,
+      totalAmount,
+      description,
+      source,
+      externalId,
+      documentUrl,
+      documentName,
+    } = input
 
     if (!billNumber || totalAmount <= 0) {
       throw new Error('Valid bill number and total amount are required')
     }
 
     return db.$transaction(async (tx) => {
-      const vendor = await tx.vendor.findUnique({ where: { id: vendorId } })
+      const vendor = await tx.vendor.findUnique({
+        where: { id: vendorId },
+      })
+
       if (!vendor || vendor.companyId !== companyId) {
         throw new Error('Vendor not found or unauthorized')
       }
@@ -62,7 +89,9 @@ export class BillService {
           documentUrl: documentUrl || null,
           documentName: documentName || null,
         },
-        include: { vendor: true },
+        include: {
+          vendor: true,
+        },
       })
 
       // Log Financial Transaction (Credit Vendor Payable)
@@ -92,7 +121,11 @@ export class BillService {
           action: 'CREATE',
           entityType: 'BILL',
           entityId: bill.id,
-          details: JSON.stringify({ billNumber, vendorName: vendor.name, totalAmount }),
+          details: JSON.stringify({
+            billNumber,
+            vendorName: vendor.name,
+            totalAmount,
+          }),
         },
       })
 
@@ -101,10 +134,29 @@ export class BillService {
   }
 
   /**
-   * Records a Vendor Payment, recalculating bill paid amount & status inside a transaction.
+   * Records a Vendor Payment and recalculates the Bill status
+   * inside the same database transaction.
    */
-  static async recordVendorPayment(input: VendorPaymentInput, userId?: string, userName?: string) {
-    const { companyId, billId, paymentDate, amount, paymentMethod, referenceNumber, notes, source, externalId } = input
+  static async recordVendorPayment(
+    input: VendorPaymentInput,
+    userId?: string,
+    userName?: string
+  ) {
+    const {
+      companyId,
+      billId,
+      paymentDate,
+      amount,
+      paymentMethod,
+      referenceNumber,
+      notes,
+      source,
+      externalId,
+      documentKey,
+      documentName,
+      documentType,
+      documentSize,
+    } = input
 
     if (amount <= 0) {
       throw new Error('Payment amount must be greater than zero')
@@ -113,7 +165,9 @@ export class BillService {
     return db.$transaction(async (tx) => {
       const bill = await tx.bill.findUnique({
         where: { id: billId },
-        include: { vendor: true },
+        include: {
+          vendor: true,
+        },
       })
 
       if (!bill || bill.companyId !== companyId) {
@@ -133,6 +187,10 @@ export class BillService {
           status: 'ACTIVE',
           source: source || 'MANUAL',
           externalId: externalId || null,
+          documentKey: documentKey || null,
+          documentName: documentName || null,
+          documentType: documentType || null,
+          documentSize: documentSize ?? null,
         },
       })
 
@@ -151,7 +209,9 @@ export class BillService {
           debit: Number(amount),
           credit: 0,
           amount: Number(amount),
-          description: `Supplier payment for Bill #${bill.billNumber}${referenceNumber ? ` (${referenceNumber})` : ''}`,
+          description: `Supplier payment for Bill #${bill.billNumber}${
+            referenceNumber ? ` (${referenceNumber})` : ''
+          }`,
           source: source || 'MANUAL',
           externalId: externalId || null,
         },
@@ -166,7 +226,10 @@ export class BillService {
           action: 'CREATE',
           entityType: 'VENDOR_PAYMENT',
           entityId: payment.id,
-          details: JSON.stringify({ billNumber: bill.billNumber, amount }),
+          details: JSON.stringify({
+            billNumber: bill.billNumber,
+            amount,
+          }),
         },
       })
 
@@ -175,16 +238,24 @@ export class BillService {
   }
 
   /**
-   * Reverses (voids) a vendor payment.
+   * Reverses (voids) a Vendor Payment and recalculates
+   * the related Bill status.
    */
-  static async reverseVendorPayment(paymentId: string, companyId: string, userId?: string, userName?: string) {
+  static async reverseVendorPayment(
+    paymentId: string,
+    companyId: string,
+    userId?: string,
+    userName?: string
+  ) {
     return db.$transaction(async (tx) => {
       const payment = await tx.vendorPayment.findUnique({
         where: { id: paymentId },
       })
 
       if (!payment || payment.companyId !== companyId) {
-        throw new Error('Vendor payment record not found or unauthorized')
+        throw new Error(
+          'Vendor payment record not found or unauthorized'
+        )
       }
 
       if (payment.status === 'REVERSED') {
@@ -193,11 +264,15 @@ export class BillService {
 
       const updated = await tx.vendorPayment.update({
         where: { id: paymentId },
-        data: { status: 'REVERSED' },
+        data: {
+          status: 'REVERSED',
+        },
       })
 
+      // Recalculate Bill Status after payment reversal
       await this.recalculateBillStatus(tx, payment.billId)
 
+      // Audit Log
       await tx.auditLog.create({
         data: {
           companyId,
@@ -206,7 +281,10 @@ export class BillService {
           action: 'REVERSE',
           entityType: 'VENDOR_PAYMENT',
           entityId: paymentId,
-          details: JSON.stringify({ billId: payment.billId, reversedAmount: payment.amount }),
+          details: JSON.stringify({
+            billId: payment.billId,
+            reversedAmount: payment.amount,
+          }),
         },
       })
 
@@ -215,36 +293,113 @@ export class BillService {
   }
 
   /**
-   * Recalculate bill status.
+   * Calculates the correct Bill status.
+   *
+   * Rules:
+   *
+   * PAID:
+   *   Paid amount >= Bill total
+   *
+   * OVERDUE:
+   *   Outstanding amount exists AND due date has passed
+   *
+   * PARTIAL:
+   *   Some payment exists but bill is not fully paid
+   *   and due date has not passed
+   *
+   * UNPAID:
+   *   No payment has been made and due date has not passed
    */
-  static async recalculateBillStatus(tx: any, billId: string) {
+  static calculateBillStatus(
+    totalAmount: number,
+    totalPaid: number,
+    dueDate?: Date | null
+  ): 'UNPAID' | 'PARTIAL' | 'PAID' | 'OVERDUE' {
+    const total = Number(totalAmount || 0)
+    const paid = Number(totalPaid || 0)
+
+    // Fully paid
+    if (paid >= total) {
+      return 'PAID'
+    }
+
+    // Outstanding amount exists and due date has passed
+    if (
+      dueDate &&
+      new Date(dueDate).getTime() < Date.now()
+    ) {
+      return 'OVERDUE'
+    }
+
+    // Some payment has been made
+    if (paid > 0) {
+      return 'PARTIAL'
+    }
+
+    // No payment has been made
+    return 'UNPAID'
+  }
+
+  /**
+   * Recalculates Bill status using all ACTIVE payments.
+   */
+  static async recalculateBillStatus(
+    tx: any,
+    billId: string
+  ) {
     const bill = await tx.bill.findUnique({
-      where: { id: billId },
+      where: {
+        id: billId,
+      },
       include: {
-        payments: { where: { status: 'ACTIVE' } },
+        payments: {
+          where: {
+            status: 'ACTIVE',
+          },
+        },
       },
     })
 
-    if (!bill) return
-
-    const totalPaid = bill.payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0)
-    const outstanding = Math.max(0, Number(bill.totalAmount) - totalPaid)
-    const today = new Date()
-
-    let newStatus = 'UNPAID'
-    if (totalPaid === 0) {
-      newStatus = bill.dueDate && new Date(bill.dueDate) < today ? 'OVERDUE' : 'UNPAID'
-    } else if (totalPaid < Number(bill.totalAmount)) {
-      newStatus = bill.dueDate && new Date(bill.dueDate) < today ? 'OVERDUE' : 'PARTIAL'
-    } else {
-      newStatus = 'PAID'
+    if (!bill) {
+      throw new Error('Bill not found')
     }
 
-    await tx.bill.update({
-      where: { id: billId },
-      data: { status: newStatus },
-    })
+    // Calculate total amount paid
+    const totalPaid = bill.payments.reduce(
+      (sum: number, payment: any) =>
+        sum + Number(payment.amount || 0),
+      0
+    )
 
-    return { totalPaid, outstanding, status: newStatus }
+    // Calculate outstanding amount
+    const outstanding = Math.max(
+      0,
+      Number(bill.totalAmount) - totalPaid
+    )
+
+    // Calculate correct status
+    const newStatus = this.calculateBillStatus(
+      Number(bill.totalAmount),
+      totalPaid,
+      bill.dueDate
+    )
+
+    // Update only when the status actually changes
+    if (bill.status !== newStatus) {
+      await tx.bill.update({
+        where: {
+          id: billId,
+        },
+        data: {
+          status: newStatus,
+        },
+      })
+    }
+
+    return {
+      totalPaid,
+      outstanding,
+      status: newStatus,
+    }
   }
 }
