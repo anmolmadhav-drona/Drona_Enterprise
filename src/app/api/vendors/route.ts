@@ -4,11 +4,51 @@ import { VendorService } from '@/lib/services/VendorService'
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const accessibleIds = await getAccessibleCompanyIds(user)
 
-  const vendors = await VendorService.getVendors(accessibleIds)
-  return NextResponse.json({ vendors })
+  if (!user) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    )
+  }
+
+  const accessibleIds =
+    await getAccessibleCompanyIds(user)
+
+  const { searchParams } = new URL(req.url)
+
+  const requestedCompanyId =
+    searchParams.get('companyId')
+
+  let targetCompanyId: string | null = null
+
+  if (user.role === 'GROUP_ADMIN') {
+    targetCompanyId = requestedCompanyId
+  } else {
+    targetCompanyId = user.companyId
+  }
+
+  if (!targetCompanyId) {
+    return NextResponse.json({
+      vendors: [],
+    })
+  }
+
+  if (!accessibleIds.includes(targetCompanyId)) {
+    return NextResponse.json(
+      { error: 'Forbidden' },
+      { status: 403 }
+    )
+  }
+
+  const vendors =
+    await VendorService.getVendors([
+      targetCompanyId,
+    ])
+
+  return NextResponse.json({
+    vendors,
+  })
 }
 
 export async function POST(req: NextRequest) {

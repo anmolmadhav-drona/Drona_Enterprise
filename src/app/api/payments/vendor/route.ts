@@ -72,15 +72,10 @@ export async function POST(req: NextRequest) {
     const accessibleIds = await getAccessibleCompanyIds(user)
 
     /*
-     * IMPORTANT:
-     * This endpoint now accepts multipart/form-data
-     * because it can contain a supporting document.
+     * Payment requests are sent as multipart/form-data
+     * because they may contain a supporting document.
      */
     const formData = await req.formData()
-
-    const companyId = String(
-      formData.get('companyId') || ''
-    )
 
     const billId = String(
       formData.get('billId') || ''
@@ -114,10 +109,23 @@ export async function POST(req: NextRequest) {
         ? String(notesValue)
         : undefined
 
+    const sourceValue = formData.get('source')
+    const externalIdValue = formData.get('externalId')
+
+    const source =
+      sourceValue
+        ? String(sourceValue)
+        : undefined
+
+    const externalId =
+      externalIdValue
+        ? String(externalIdValue)
+        : undefined
+
     const fileValue = formData.get('file')
 
     /*
-     * Validate required payment fields
+     * Validate required fields.
      */
     if (!billId) {
       return NextResponse.json(
@@ -144,47 +152,48 @@ export async function POST(req: NextRequest) {
     }
 
     /*
-     * Determine target company.
+     * Find the bill first.
+     *
+     * IMPORTANT:
+     * We do NOT trust companyId from the browser.
+     * The company is determined from the bill itself.
      */
-    const targetCompanyId =
-      user.role === 'GROUP_ADMIN' && companyId
-        ? companyId
-        : user.companyId || accessibleIds[0]
-
-    if (!targetCompanyId) {
-      return NextResponse.json(
-        { error: 'Company could not be determined' },
-        { status: 400 }
-      )
-    }
-
-    if (!accessibleIds.includes(targetCompanyId)) {
-      return NextResponse.json(
-        { error: 'Forbidden' },
-        { status: 403 }
-      )
-    }
-
-    /*
-     * Verify that the bill belongs to the selected company.
-     */
-    const bill = await db.bill.findFirst({
+    const bill = await db.bill.findUnique({
       where: {
         id: billId,
-        companyId: targetCompanyId,
       },
       select: {
         id: true,
+        companyId: true,
         billNumber: true,
       },
     })
 
     if (!bill) {
       return NextResponse.json(
-        { error: 'Bill not found or unauthorized' },
+        { error: 'Bill not found' },
         { status: 404 }
       )
     }
+
+    /*
+     * Check whether the logged-in user can access
+     * the company that owns this bill.
+     */
+    if (!accessibleIds.includes(bill.companyId)) {
+      return NextResponse.json(
+        {
+          error:
+            'You are not authorized to make a payment for this bill',
+        },
+        { status: 403 }
+      )
+    }
+
+    /*
+     * Always use the companyId stored on the bill.
+     */
+    const targetCompanyId = bill.companyId
 
     /*
      * Supporting document information.
@@ -197,7 +206,13 @@ export async function POST(req: NextRequest) {
     /*
      * Upload supporting document if provided.
      */
-    if (fileValue instanceof File && fileValue.size > 0) {
+    if (
+      fileValue instanceof File &&
+      fileValue.size > 0
+    ) {
+      /*
+       * Validate file type.
+       */
       if (!ALLOWED_FILE_TYPES.includes(fileValue.type)) {
         return NextResponse.json(
           {
@@ -208,6 +223,9 @@ export async function POST(req: NextRequest) {
         )
       }
 
+      /*
+       * Validate file size.
+       */
       if (fileValue.size > MAX_FILE_SIZE) {
         return NextResponse.json(
           {
@@ -218,31 +236,52 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      const bytes = await fileValue.arrayBuffer()
-      const buffer = Buffer.from(bytes)
+      const bytes =
+        await fileValue.arrayBuffer()
 
-      const safeFileName = fileValue.name
-        .replace(/[^a-zA-Z0-9._-]/g, '_')
-        .replace(/_+/g, '_')
+      const buffer =
+        Buffer.from(bytes)
 
       /*
-       * Example S3 path:
+       * Make the original filename safe
+       * before using it in the S3 key.
+       */
+      const safeFileName =
+        fileValue.name
+          .replace(
+            /[^a-zA-Z0-9._-]/g,
+            '_'
+          )
+          .replace(
+            /_+/g,
+            '_'
+          )
+
+      /*
+       * Example:
        *
        * vendor-payments/
        *   companyId/
        *     billId/
-       *       timestamp-file.pdf
+       *       timestamp-random-filename.pdf
        */
       documentKey =
         `vendor-payments/${targetCompanyId}/${billId}/` +
         `${Date.now()}-${crypto.randomUUID()}-${safeFileName}`
 
+      /*
+       * Upload to S3.
+       */
       await uploadToS3(
         documentKey,
         buffer,
         fileValue.type
       )
 
+      /*
+       * Keep the key so that it can be deleted
+       * if database creation fails.
+       */
       uploadedKey = documentKey
 
       documentName = fileValue.name
@@ -251,23 +290,26 @@ export async function POST(req: NextRequest) {
     }
 
     /*
-     * Create the VendorPayment record.
+     * Create the payment.
      *
-     * BillService will also:
-     * - recalculate the bill status
-     * - create the financial transaction
-     * - create the audit log
+     * BillService will:
+     * - create VendorPayment
+     * - recalculate bill status
+     * - create financial transaction
+     * - create audit log
      */
     const payment =
       await BillService.recordVendorPayment(
         {
           companyId: targetCompanyId,
           billId,
-          paymentDate: paymentDate || new Date(),
+          paymentDate,
           amount: Number(amount),
           paymentMethod,
           referenceNumber,
           notes,
+          source,
+          externalId,
 
           documentKey,
           documentName,
@@ -278,9 +320,13 @@ export async function POST(req: NextRequest) {
         user.name
       )
 
+    /*
+     * Everything succeeded.
+     */
     return NextResponse.json(
       {
         payment,
+
         document: documentKey
           ? {
               key: documentKey,
@@ -294,12 +340,14 @@ export async function POST(req: NextRequest) {
     )
   } catch (err: any) {
     /*
-     * If S3 upload succeeded but database creation failed,
-     * remove the orphaned S3 object.
+     * If S3 upload succeeded but database
+     * creation failed, remove the orphaned file.
      */
     if (uploadedKey) {
       try {
-        await deleteFromS3(uploadedKey)
+        await deleteFromS3(
+          uploadedKey
+        )
       } catch (deleteError) {
         console.error(
           'Failed to clean up uploaded S3 file:',

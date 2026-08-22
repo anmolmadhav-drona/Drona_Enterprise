@@ -39,6 +39,13 @@ type Vendor = {
   name: string
   code?: string | null
 }
+type Company = {
+  id: string
+  name: string
+  code: string
+  type: string
+  parentId?: string | null
+}
 
 type Payment = {
   id: string
@@ -54,6 +61,11 @@ type Bill = {
   id: string
   companyId: string
   vendorId: string
+  company?: {
+    id: string
+    name: string
+    code: string
+  }
   billNumber: string
   billDate: string
   dueDate?: string | null
@@ -72,6 +84,7 @@ type Bill = {
 }
 
 type BillForm = {
+  companyId: string
   vendorId: string
   billNumber: string
   billDate: string
@@ -93,6 +106,7 @@ type PaymentForm = {
 }
 
 const emptyBillForm: BillForm = {
+  companyId: '',
   vendorId: '',
   billNumber: '',
   billDate: '',
@@ -163,6 +177,7 @@ export function BillsModule() {
 
   const [bills, setBills] = useState<Bill[]>([])
   const [vendors, setVendors] = useState<Vendor[]>([])
+  const [companies, setCompanies] = useState<Company[]>([])
 
   const [loading, setLoading] = useState(true)
   const [loadingVendors, setLoadingVendors] = useState(true)
@@ -207,23 +222,61 @@ export function BillsModule() {
     }
   }
 
-  async function loadVendors() {
+  async function loadVendors(companyId?: string) {
+    if (!companyId) {
+      setVendors([])
+      return
+    }
+
     setLoadingVendors(true)
 
     try {
-      const data = await fetchJson<{ vendors: Vendor[] }>('/api/vendors')
+      const data = await fetchJson<{ vendors: Vendor[] }>(
+        `/api/vendors?companyId=${encodeURIComponent(companyId)}`
+      )
+
       setVendors(data.vendors || [])
     } catch (error: any) {
       toast.error(error.message || 'Failed to load vendors')
+      setVendors([])
     } finally {
       setLoadingVendors(false)
     }
   }
 
   useEffect(() => {
-    void loadBills()
-    void loadVendors()
-  }, [])
+    if (!user) return
+
+    async function initialize() {
+      try {
+        const companiesData = await fetchJson<{ companies: Company[] }>(
+          '/api/companies'
+        )
+
+        setCompanies(companiesData.companies || [])
+
+        if (
+          user?.role !== 'GROUP_ADMIN' &&
+          user?.companyId
+        ) {
+          const companyId = user.companyId
+
+          setBillForm((prev) => ({
+            ...prev,
+            companyId,
+          }))
+
+          await loadVendors(companyId)
+        }
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to initialize bill form')
+      }
+
+      await loadBills()
+    }
+
+    void initialize()
+  }, [user])
 
   const filteredBills = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -276,10 +329,22 @@ export function BillsModule() {
   }, [bills])
 
   function openCreate() {
+    const companyId =
+      user?.role === 'GROUP_ADMIN'
+        ? ''
+        : user?.companyId || ''
+
     setBillForm({
       ...emptyBillForm,
+      companyId,
       billDate: new Date().toISOString().slice(0, 10),
     })
+
+    setVendors([])
+
+    if (companyId) {
+      void loadVendors(companyId)
+    }
 
     setSelectedBill(null)
     setCreateOpen(true)
@@ -299,6 +364,7 @@ export function BillsModule() {
     setSelectedBill(bill)
 
     setBillForm({
+      companyId: bill.companyId,
       vendorId: bill.vendorId,
       billNumber: bill.billNumber,
       billDate: bill.billDate?.slice(0, 10) || '',
@@ -588,7 +654,53 @@ export function BillsModule() {
     return (
       <div className="space-y-5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
+          {/* Company */}
+          <div className="space-y-2 min-w-0">
+            <Label>Company *</Label>
+
+            {user?.role === 'GROUP_ADMIN' ? (
+              <Select
+                value={billForm.companyId}
+                onValueChange={(value) => {
+                  setBillForm((prev) => ({
+                    ...prev,
+                    companyId: value,
+                    vendorId: '',
+                  }))
+
+                  void loadVendors(value)
+                }}
+              >
+                <SelectTrigger className="w-full min-w-0">
+                  <SelectValue placeholder="Select company" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  {companies
+                    .filter((company) => company.type === 'TENANT')
+                    .map((company) => (
+                      <SelectItem
+                        key={company.id}
+                        value={company.id}
+                      >
+                        {company.name}
+                        {company.code
+                          ? ` (${company.code})`
+                          : ''}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={user?.company?.name || ''}
+                disabled
+              />
+            )}
+          </div>
+
+          {/* Vendor */}
+          <div className="space-y-2 min-w-0">
             <Label>Vendor *</Label>
 
             <Select
@@ -599,14 +711,19 @@ export function BillsModule() {
                   vendorId: value,
                 }))
               }
-              disabled={loadingVendors}
+              disabled={
+                loadingVendors ||
+                !billForm.companyId
+              }
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-full min-w-0">
                 <SelectValue
                   placeholder={
-                    loadingVendors
-                      ? 'Loading vendors...'
-                      : 'Select vendor'
+                    !billForm.companyId
+                      ? 'Select company first'
+                      : loadingVendors
+                        ? 'Loading vendors...'
+                        : 'Select vendor'
                   }
                 />
               </SelectTrigger>
@@ -618,14 +735,16 @@ export function BillsModule() {
                     value={vendor.id}
                   >
                     {vendor.name}
-                    {vendor.code ? ` (${vendor.code})` : ''}
+                    {vendor.code
+                      ? ` (${vendor.code})`
+                      : ''}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 min-w-0">
             <Label>Bill Number *</Label>
             <Input
               value={billForm.billNumber}
@@ -925,9 +1044,16 @@ export function BillsModule() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b">
               <tr>
+                {user?.role === 'GROUP_ADMIN' && (
+                  <th className="text-left px-4 py-3 font-semibold">
+                    Company
+                  </th>
+                )}
+
                 <th className="text-left px-4 py-3 font-semibold">
                   Bill
                 </th>
+
                 <th className="text-left px-4 py-3 font-semibold">
                   Vendor
                 </th>
@@ -977,6 +1103,19 @@ export function BillsModule() {
                     key={bill.id}
                     className="hover:bg-slate-50/70"
                   >
+                    {user?.role === 'GROUP_ADMIN' && (
+                      <td className="px-4 py-3">
+                        <div className="font-medium">
+                          {bill.company?.name || '—'}
+                        </div>
+
+                        {bill.company?.code && (
+                          <div className="text-xs text-slate-500">
+                            {bill.company.code}
+                          </div>
+                        )}
+                      </td>
+                    )}
                     <td className="px-4 py-4">
                       <div className="font-semibold text-[#0B2148]">
                         {bill.billNumber}
