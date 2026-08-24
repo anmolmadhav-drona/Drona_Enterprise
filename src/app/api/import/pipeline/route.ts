@@ -22,34 +22,119 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const accessibleIds = await getAccessibleCompanyIds(user)
 
-  const body = await req.json()
-  const { companyId, sourceType, fileName, fileType, rawRows } = body
-
-  const targetCompanyId = user.role === 'GROUP_ADMIN' && companyId ? companyId : user.companyId || accessibleIds[0]
-
-  if (!accessibleIds.includes(targetCompanyId)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!user) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    )
   }
 
-  if (!Array.isArray(rawRows) || rawRows.length === 0) {
-    return NextResponse.json({ error: 'No raw rows provided for import staging' }, { status: 400 })
+  if (
+    user.role !== 'GROUP_ADMIN' &&
+    user.role !== 'COMPANY_ADMIN'
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          'Forbidden: Only Company Admins and Group Admins can import data',
+      },
+      { status: 403 }
+    )
   }
 
   try {
-    const job = await ImportPipelineService.createJob({
-      companyId: targetCompanyId,
-      uploadedBy: user.name,
-      sourceType: sourceType || 'EXCEL',
-      fileName: fileName || 'Imported_Data.xlsx',
-      fileType: fileType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      rawRows,
-    })
+    const accessibleIds =
+      await getAccessibleCompanyIds(user)
 
-    return NextResponse.json({ job }, { status: 201 })
+    const body = await req.json()
+
+    const {
+      companyId,
+      sourceType,
+      fileName,
+      fileType,
+      rawRows,
+      mapping,
+    } = body
+
+    const targetCompanyId =
+      user.role === 'GROUP_ADMIN' && companyId
+        ? companyId
+        : user.companyId || accessibleIds[0]
+
+    if (
+      !targetCompanyId ||
+      !accessibleIds.includes(targetCompanyId)
+    ) {
+      return NextResponse.json(
+        { error: 'Forbidden company access' },
+        { status: 403 }
+      )
+    }
+
+    if (
+      !Array.isArray(rawRows) ||
+      rawRows.length === 0
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'No validated MIS rows were provided',
+        },
+        { status: 400 }
+      )
+    }
+
+    if (
+      !mapping ||
+      typeof mapping !== 'object'
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'Column mapping is required',
+        },
+        { status: 400 }
+      )
+    }
+
+    const result =
+      await ImportPipelineService.executeLogisticsImport({
+        companyId: targetCompanyId,
+        uploadedBy: user.name,
+        fileName:
+          fileName || 'Imported_Logistics_MIS.xlsx',
+        fileType:
+          fileType ||
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        rawRows,
+        mapping,
+      })
+
+    return NextResponse.json(
+      {
+        message:
+          'Logistics MIS imported successfully',
+        job: result.job,
+        reconciliation:
+          result.reconciliation,
+      },
+      { status: 201 }
+    )
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Import staging failed' }, { status: 400 })
+    console.error(
+      '[LOGISTICS IMPORT ERROR]',
+      err
+    )
+
+    return NextResponse.json(
+      {
+        error:
+          err?.message ||
+          'Logistics MIS import failed',
+      },
+      { status: 500 }
+    )
   }
 }

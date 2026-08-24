@@ -301,4 +301,158 @@ export class ImportPipelineService {
       return { job: completedJob, reconciliation }
     })
   }
+
+    /**
+   * Imports Logistics / Dispatch MIS rows into the PostgreSQL
+   * import staging layer.
+   *
+   * This intentionally does not create Revenue/Bill records because
+   * Logistics MIS is not yet represented by a dedicated production
+   * Prisma model.
+   */
+  static async executeLogisticsImport(params: {
+    companyId: string
+    uploadedBy: string
+    fileName: string
+    fileType: string
+    rawRows: Record<string, any>[]
+    mapping: Record<string, string>
+  }) {
+    const {
+      companyId,
+      uploadedBy,
+      fileName,
+      fileType,
+      rawRows,
+      mapping,
+    } = params
+
+    return db.$transaction(async (tx) => {
+      const job = await tx.importJob.create({
+        data: {
+          companyId,
+          uploadedBy,
+          sourceType: 'EXCEL',
+          fileName,
+          fileType,
+          status: 'IMPORTING',
+          totalRows: rawRows.length,
+          startedAt: new Date(),
+          columnMapping: JSON.stringify(mapping),
+        },
+      })
+
+      let successfulRows = 0
+      let failedRows = 0
+
+      for (let index = 0; index < rawRows.length; index++) {
+        const raw = rawRows[index]
+
+        try {
+          const normalizedData: Record<string, any> = {}
+
+          Object.entries(mapping).forEach(
+            ([targetField, sourceColumn]) => {
+              normalizedData[targetField] =
+                raw[sourceColumn] ?? ''
+            }
+          )
+
+          // Keep the original MIS fields as well.
+          normalizedData.sourceRow = raw
+
+          const row = await tx.importRow.create({
+            data: {
+              importJobId: job.id,
+              rowNumber: index + 1,
+              rawContent: JSON.stringify(raw),
+              normalizedData: JSON.stringify(normalizedData),
+              targetEntity: 'LOGISTICS',
+              status: 'IMPORTED',
+            },
+          })
+
+          successfulRows++
+
+          console.log(
+            `[LOGISTICS IMPORT] Row ${row.rowNumber} imported`
+          )
+        } catch (error: any) {
+          failedRows++
+
+          await tx.importRow.create({
+            data: {
+              importJobId: job.id,
+              rowNumber: index + 1,
+              rawContent: JSON.stringify(raw),
+              targetEntity: 'LOGISTICS',
+              status: 'FAILED',
+              errorMessage:
+                error?.message || 'Failed to import row',
+            },
+          })
+        }
+      }
+
+      const reconciliation = {
+        totalSourceRows: rawRows.length,
+        totalImportedRows: successfulRows,
+        failedRows,
+        difference: rawRows.length - successfulRows,
+        status:
+          failedRows === 0
+            ? 'RECONCILED'
+            : 'REQUIRES_REVIEW',
+      }
+
+      const completedJob = await tx.importJob.update({
+        where: {
+          id: job.id,
+        },
+        data: {
+          status:
+            failedRows === 0
+              ? 'COMPLETED'
+              : 'PARTIAL',
+
+          successfulRows,
+          failedRows,
+
+          validRows: successfulRows,
+          invalidRows: failedRows,
+
+          reconciliation:
+            JSON.stringify(reconciliation),
+
+          completedAt: new Date(),
+        },
+        include: {
+          rows: true,
+        },
+      })
+
+      await tx.auditLog.create({
+        data: {
+          companyId,
+          userId: null,
+          userName: uploadedBy,
+          action: 'IMPORT',
+          entityType: 'IMPORT',
+          entityId: job.id,
+          details: JSON.stringify({
+            fileName,
+            sourceType: 'EXCEL',
+            targetEntity: 'LOGISTICS',
+            importedRows: successfulRows,
+            failedRows,
+          }),
+        },
+      })
+
+      return {
+        job: completedJob,
+        reconciliation,
+      }
+    })
+  }
 }

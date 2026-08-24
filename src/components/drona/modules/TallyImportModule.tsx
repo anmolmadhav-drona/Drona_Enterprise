@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import * as XLSX from 'xlsx'
 import {
   UploadCloud, FileSpreadsheet, Sparkles, ShieldAlert, CheckCircle2,
   AlertTriangle, ArrowRight, RefreshCw, Layers, Database, ShieldCheck,
@@ -33,11 +34,15 @@ const PIPELINE_STEPS = [
   { id: 8, name: 'History', desc: 'Audit history' },
 ]
 
-// Mock parsed Tally fields
 type FieldMapping = {
   tallyField: string
   dronaField: string
-  targetEntity: 'Revenue' | 'Expense' | 'EmployeeCost' | 'Client'
+  targetEntity:
+    | 'Revenue'
+    | 'Expense'
+    | 'EmployeeCost'
+    | 'Client'
+    | 'Logistics'
   sampleValue: string
   confidence: number
 }
@@ -51,6 +56,155 @@ const DEFAULT_MAPPINGS: FieldMapping[] = [
   { tallyField: 'Credit Amount (₹)', dronaField: 'totalCredit', targetEntity: 'Revenue', sampleValue: '4,82,00,000', confidence: 100 },
   { tallyField: 'Narration / Remarks', dronaField: 'description', targetEntity: 'Revenue', sampleValue: 'Q2 Logistics operations billing', confidence: 92 },
 ]
+
+function buildLogisticsMappings(
+  headers: string[],
+  rows: Record<string, any>[]
+): FieldMapping[] {
+  const firstRow = rows[0] || {}
+
+  const mappingRules: Array<{
+    source: string
+    target: string
+    confidence: number
+  }> = [
+    {
+      source: 'PARTY NAME',
+      target: 'partyName',
+      confidence: 98,
+    },
+    {
+      source: 'PICKUP LOCATION',
+      target: 'pickupLocation',
+      confidence: 98,
+    },
+    {
+      source: 'DESTINATION',
+      target: 'destination',
+      confidence: 98,
+    },
+    {
+      source: 'INVOICE NUMBER',
+      target: 'invoiceNumber',
+      confidence: 99,
+    },
+    {
+      source: 'LR. NO.',
+      target: 'lrNumber',
+      confidence: 99,
+    },
+    {
+      source: 'LR DATE',
+      target: 'lrDate',
+      confidence: 98,
+    },
+    {
+      source: 'MATERIAL DETAILS',
+      target: 'materialDetails',
+      confidence: 97,
+    },
+    {
+      source: 'TRANSPOTER NAME',
+      target: 'transporterName',
+      confidence: 95,
+    },
+    {
+      source: 'TOTAL QUANTITY IN LTRS',
+      target: 'quantityLitres',
+      confidence: 97,
+    },
+    {
+      source: 'LOAD TYPE FTL/PTL',
+      target: 'loadType',
+      confidence: 95,
+    },
+    {
+      source: 'EXPECTED DELIVERY DATE',
+      target: 'expectedDeliveryDate',
+      confidence: 96,
+    },
+    {
+      source: 'ACTUAL DELIVERY DATE',
+      target: 'actualDeliveryDate',
+      confidence: 96,
+    },
+    {
+      source: 'DELIVERY STATUS',
+      target: 'deliveryStatus',
+      confidence: 98,
+    },
+    {
+      source: 'LR STATUS',
+      target: 'lrStatus',
+      confidence: 98,
+    },
+    {
+      source: 'DAMAGE',
+      target: 'damage',
+      confidence: 90,
+    },
+    {
+      source: 'LOADING CHARGES',
+      target: 'loadingCharges',
+      confidence: 94,
+    },
+    {
+      source: 'UNLOADING CHARGES',
+      target: 'unloadingCharges',
+      confidence: 94,
+    },
+    {
+      source: 'VEHICLE NUMBER',
+      target: 'vehicleNumber',
+      confidence: 99,
+    },
+    {
+      source: 'VEHICLE TYPE',
+      target: 'vehicleType',
+      confidence: 98,
+    },
+    {
+      source: 'PLY',
+      target: 'ply',
+      confidence: 90,
+    },
+    {
+      source: 'REMARKS',
+      target: 'remarks',
+      confidence: 95,
+    },
+    {
+      source: 'DISPATCH DATE',
+      target: 'dispatchDate',
+      confidence: 96,
+    },
+    {
+      source: 'DISPATCH VEHICLE',
+      target: 'dispatchVehicle',
+      confidence: 96,
+    },
+    {
+      source: 'VENDOR NAME',
+      target: 'vendorName',
+      confidence: 98,
+    },
+    {
+      source: 'VEHICLE RATE',
+      target: 'vehicleRate',
+      confidence: 98,
+    },
+  ]
+
+  return mappingRules
+    .filter((rule) => headers.includes(rule.source))
+    .map((rule) => ({
+      tallyField: rule.source,
+      dronaField: rule.target,
+      targetEntity: 'Logistics',
+      sampleValue: String(firstRow[rule.source] ?? ''),
+      confidence: rule.confidence,
+    }))
+}
 
 type PreviewRow = {
   id: string
@@ -73,48 +227,462 @@ const SAMPLE_PREVIEW_ROWS: PreviewRow[] = [
   { id: '6', vDate: '2024-08-06', tallyVoucher: 'JV-902', partyLedger: 'Misc Admin Expenses', targetEntity: 'Expense', debit: 250000, credit: 250000, targetDbColumn: 'Expense.amount', status: 'ATTENTION' },
 ]
 
+function validateLogisticsRows(
+  rows: Record<string, any>[]
+) {
+  const invoiceNumbers = new Set<string>()
+  const lrNumbers = new Set<string>()
+
+  let valid = 0
+  let duplicates = 0
+  let attention = 0
+
+  rows.forEach((row) => {
+    const invoiceNumber = String(
+      row['INVOICE NUMBER'] ?? ''
+    ).trim()
+
+    const lrNumber = String(
+      row['LR. NO.'] ?? ''
+    ).trim()
+
+    const partyName = String(
+      row['PARTY NAME'] ?? ''
+    ).trim()
+
+    const destination = String(
+      row['DESTINATION'] ?? ''
+    ).trim()
+
+    const vehicleNumber = String(
+      row['VEHICLE NUMBER'] ?? ''
+    ).trim()
+
+    const vendorName = String(
+      row['VENDOR NAME'] ?? ''
+    ).trim()
+
+    const vehicleRate = String(
+      row['VEHICLE RATE'] ?? ''
+    ).trim()
+
+    const isDuplicate =
+      (invoiceNumber &&
+        invoiceNumbers.has(invoiceNumber)) ||
+      (lrNumber &&
+        lrNumbers.has(lrNumber))
+
+    if (invoiceNumber) {
+      invoiceNumbers.add(invoiceNumber)
+    }
+
+    if (lrNumber) {
+      lrNumbers.add(lrNumber)
+    }
+
+    if (isDuplicate) {
+      duplicates++
+      return
+    }
+
+    const missingRequiredField =
+      !invoiceNumber ||
+      !lrNumber ||
+      !partyName ||
+      !destination ||
+      !vehicleNumber ||
+      !vendorName 
+
+    if (missingRequiredField) {
+      attention++
+      return
+    }
+
+    valid++
+  })
+
+  return {
+    valid,
+    duplicates,
+    attention,
+  }
+}
+
+function getLogisticsPreviewStatus(
+  row: Record<string, any>,
+  index: number,
+  rows: Record<string, any>[]
+): 'VALID' | 'DUPLICATE' | 'ATTENTION' {
+  const invoiceNumber = String(
+    row['INVOICE NUMBER'] ?? ''
+  ).trim()
+
+  const lrNumber = String(
+    row['LR. NO.'] ?? ''
+  ).trim()
+
+  const previousRows = rows.slice(0, index)
+
+  const duplicateInvoice =
+    invoiceNumber &&
+    previousRows.some(
+      (previousRow) =>
+        String(
+          previousRow['INVOICE NUMBER'] ?? ''
+        ).trim() === invoiceNumber
+    )
+
+  const duplicateLR =
+    lrNumber &&
+    previousRows.some(
+      (previousRow) =>
+        String(
+          previousRow['LR. NO.'] ?? ''
+        ).trim() === lrNumber
+    )
+
+  if (duplicateInvoice || duplicateLR) {
+    return 'DUPLICATE'
+  }
+
+  const requiredFields = [
+    invoiceNumber,
+    lrNumber,
+    String(row['PARTY NAME'] ?? '').trim(),
+    String(row['DESTINATION'] ?? '').trim(),
+    String(row['VEHICLE NUMBER'] ?? '').trim(),
+    String(row['VENDOR NAME'] ?? '').trim(),
+    String(row['VEHICLE RATE'] ?? '').trim(),
+  ]
+
+  if (requiredFields.some((value) => !value)) {
+    return 'ATTENTION'
+  }
+
+  return 'VALID'
+}
+
+
 export function TallyImportModule() {
   const { user } = useApp()
+
   const [currentStep, setCurrentStep] = useState(1)
   const [fileName, setFileName] = useState<string | null>(null)
   const [fileSize, setFileSize] = useState<string | null>(null)
+
+  const [uploadedRows, setUploadedRows] = useState<Record<string, any>[]>([])
+  const [uploadedHeaders, setUploadedHeaders] = useState<string[]>([])
+  const [sheetName, setSheetName] = useState<string>('')
+
   const [isProcessing, setIsProcessing] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
-  const [mappings, setMappings] = useState<FieldMapping[]>(DEFAULT_MAPPINGS)
-  const [detectedSheet, setDetectedSheet] = useState('Voucher Ledger & Daybook (Tally Prime v3.0)')
+  const [importJobId, setImportJobId] = useState<string | null>(null)
 
-  const isAccessAllowed = user?.role === 'GROUP_ADMIN' || user?.role === 'COMPANY_ADMIN'
+  const [importResult, setImportResult] = useState<{
+    successfulRows: number
+    failedRows: number
+  } | null>(null)
+  const [mappings, setMappings] =
+    useState<FieldMapping[]>(DEFAULT_MAPPINGS)
 
+  const [detectedSheet, setDetectedSheet] = useState('')
+  const [detectedFormat, setDetectedFormat] = useState('Unknown')
+  const [detectionConfidence, setDetectionConfidence] = useState(0)
+  const [headerRowIndex, setHeaderRowIndex] = useState<number | null>(null)
+  const [validationResults, setValidationResults] = useState({
+  valid: 0,
+  duplicates: 0,
+  attention: 0,
+})
+
+  const isAccessAllowed =
+    user?.role === 'GROUP_ADMIN' ||
+    user?.role === 'COMPANY_ADMIN'
   // Audit history entries
-  const [history, setHistory] = useState([
-    {
-      id: 'IMP-99A1',
-      fileName: 'Tally_Q1_Final_Ledger.xlsx',
-      importedAt: '2024-08-10 14:30',
-      importedBy: user?.name || 'Group Admin',
-      records: 12450,
-      totalDebit: 32000000,
-      status: 'SUCCESS',
-    },
-    {
-      id: 'IMP-88F2',
-      fileName: 'Tally_Payroll_July.csv',
-      importedAt: '2024-08-01 11:15',
-      importedBy: user?.name || 'Group Admin',
-      records: 5800,
-      totalDebit: 16200000,
-      status: 'SUCCESS',
-    },
-  ])
-
-  function handleFileDrop(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setFileName(file.name)
-    setFileSize(`${(file.size / 1024 / 1024).toFixed(2)} MB`)
-    toast.success('Tally Excel file selected', { description: file.name })
-    setTimeout(() => setCurrentStep(2), 600)
+  type ImportHistoryItem = {
+    id: string
+    fileName: string
+    importedAt: string
+    importedBy: string
+    records: number
+    totalDebit: number
+    status: string
   }
+
+  async function loadImportHistory() {
+    setHistoryLoading(true)
+
+    try {
+      const data = await fetchJson<{ jobs: any[] }>(
+        '/api/import/pipeline'
+      )
+
+      const items: ImportHistoryItem[] = (data.jobs || []).map((job) => ({
+        id: job.id,
+        fileName: job.fileName,
+        importedAt: new Date(job.createdAt).toLocaleString(),
+        importedBy: job.uploadedBy || 'Unknown',
+        records: Number(job.successfulRows ?? job.totalRows ?? 0),
+        totalDebit: Number(job.totalDebit ?? 0),
+        status: job.status,
+      }))
+
+      setHistory(items)
+    } catch (error: any) {
+      console.error('Failed to load import history:', error)
+      toast.error(
+        error.message || 'Failed to load import history'
+      )
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+
+  useEffect(() => {
+    if (!user) return
+
+    void loadImportHistory()
+  }, [user])
+
+  const [history, setHistory] =
+    useState<ImportHistoryItem[]>([])
+
+  const [historyLoading, setHistoryLoading] =
+    useState(false)
+
+  async function handleFileDrop(
+  e: React.ChangeEvent<HTMLInputElement>
+) {
+  const file = e.target.files?.[0]
+
+  if (!file) return
+
+  try {
+    setFileName(file.name)
+    setFileSize(
+      `${(file.size / 1024 / 1024).toFixed(2)} MB`
+    )
+
+    const arrayBuffer = await file.arrayBuffer()
+
+    const workbook = XLSX.read(arrayBuffer, {
+      type: 'array',
+      cellDates: true,
+    })
+
+    if (!workbook.SheetNames.length) {
+      throw new Error('No worksheet found in the file')
+    }
+
+    const firstSheetName = workbook.SheetNames[0]
+    const worksheet = workbook.Sheets[firstSheetName]
+
+    /*
+     * Read the worksheet as raw rows first.
+     *
+     * We cannot assume row 1 contains the real headers because
+     * MIS files often contain merged cells, titles and formatting
+     * rows before the actual table.
+     */
+    const rawRows = XLSX.utils.sheet_to_json<any[]>(
+      worksheet,
+      {
+        header: 1,
+        defval: '',
+        raw: false,
+      }
+    )
+
+    if (!rawRows.length) {
+      throw new Error('The uploaded file contains no data')
+    }
+
+    /*
+     * Headers that strongly indicate our Logistics MIS format.
+     */
+    const logisticsHeaders = [
+      'SR. NO.',
+      'PICKUP LOCATION',
+      'PARTY NAME',
+      'DESTINATION',
+      'INVOICE NUMBER',
+      'LR. NO.',
+      'LR DATE',
+      'MATERIAL DETAILS',
+      'TRANSPOTER NAME',
+      'TOTAL QUANTITY IN LTRS',
+      'LOAD TYPE FTL/PTL',
+      'EXPECTED DELIVERY DATE',
+      'ACTUAL DELIVERY DATE',
+      'DELIVERY STATUS',
+      'LR STATUS',
+      'VEHICLE NUMBER',
+      'VEHICLE TYPE',
+      'VENDOR NAME',
+      'VEHICLE RATE',
+    ]
+
+    const normalizeHeader = (value: unknown) =>
+      String(value ?? '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .toUpperCase()
+
+    /*
+     * Find the row that contains the actual MIS headers.
+     */
+    let detectedHeaderIndex = -1
+    let bestScore = 0
+
+    rawRows.forEach((row, index) => {
+      const rowHeaders = row.map(normalizeHeader)
+
+      const matches = logisticsHeaders.filter((header) =>
+        rowHeaders.includes(header)
+      ).length
+
+      if (matches > bestScore) {
+        bestScore = matches
+        detectedHeaderIndex = index
+      }
+    })
+
+    if (detectedHeaderIndex === -1 || bestScore < 3) {
+      throw new Error(
+        'Could not identify the header row of this file'
+      )
+    }
+
+    const rawHeaders = rawRows[detectedHeaderIndex]
+
+    /*
+     * Build clean, unique headers.
+     *
+     * Blank columns are ignored because the MIS contains
+     * formatting/merged cells that produce empty columns.
+     */
+    const headers: string[] = []
+    const headerIndexes: number[] = []
+    const usedHeaders = new Set<string>()
+
+    rawHeaders.forEach((header: unknown, columnIndex: number) => {
+      const normalized = normalizeHeader(header)
+
+      if (!normalized) return
+
+      let finalHeader = normalized
+      let suffix = 1
+
+      while (usedHeaders.has(finalHeader)) {
+        finalHeader = `${normalized}_${suffix}`
+        suffix++
+      }
+
+      usedHeaders.add(finalHeader)
+      headers.push(finalHeader)
+      headerIndexes.push(columnIndex)
+    })
+
+    /*
+     * Convert rows after the header into objects.
+     */
+    const dataRows = rawRows
+      .slice(detectedHeaderIndex + 1)
+      .filter((row) =>
+        row.some(
+          (value: unknown) =>
+            String(value ?? '').trim() !== ''
+        )
+      )
+
+    const rows: Record<string, any>[] = dataRows.map((row) => {
+      const record: Record<string, any> = {}
+
+      headers.forEach((header, index) => {
+        const originalColumnIndex = headerIndexes[index]
+        record[header] = row[originalColumnIndex] ?? ''
+      })
+
+      return record
+    })
+
+    if (!rows.length) {
+      throw new Error(
+        'The detected header row was found, but no data rows were found'
+      )
+    }
+
+    /*
+     * Calculate detection confidence.
+     *
+     * We cap this at 99% instead of pretending that an
+     * automatic detector is always 100% certain.
+     */
+    const confidence = Math.min(
+      Math.round(
+        (bestScore / logisticsHeaders.length) * 100
+      ),
+      99
+    )
+
+    const isLogisticsMIS = bestScore >= 5
+
+    setSheetName(firstSheetName)
+    setDetectedSheet(firstSheetName)
+    setHeaderRowIndex(detectedHeaderIndex)
+    setUploadedHeaders(headers)
+    setUploadedRows(rows)
+
+    if (isLogisticsMIS) {
+      setMappings(buildLogisticsMappings(headers, rows))
+    } else {
+      setMappings(DEFAULT_MAPPINGS)
+    }
+
+    if (isLogisticsMIS) {
+      setDetectedFormat('Logistics / Dispatch MIS')
+      setDetectionConfidence(confidence)
+    } else {
+      setDetectedFormat('Unknown Spreadsheet')
+      setDetectionConfidence(confidence)
+    }
+
+    console.log('========== IMPORT FILE ==========')
+    console.log('File:', file.name)
+    console.log('Sheet:', firstSheetName)
+    console.log('Header row:', detectedHeaderIndex + 1)
+    console.log('Matched headers:', bestScore)
+    console.log('Detection:', isLogisticsMIS ? 'LOGISTICS MIS' : 'UNKNOWN')
+    console.log('Confidence:', confidence + '%')
+    console.log('Clean headers:', headers)
+    console.log('Total rows:', rows.length)
+    console.log('First row:', rows[0])
+    console.log('=================================')
+
+    toast.success('File analyzed successfully', {
+      description: `${rows.length} records detected as ${isLogisticsMIS ? 'Logistics MIS' : 'Unknown Spreadsheet'}`,
+    })
+
+    setCurrentStep(2)
+  } catch (error: any) {
+    console.error('File parsing failed:', error)
+
+    toast.error('Unable to analyze the file', {
+      description:
+        error?.message ||
+        'The Excel/CSV file could not be parsed.',
+    })
+
+    setUploadedRows([])
+    setUploadedHeaders([])
+    setSheetName('')
+    setDetectedSheet('')
+    setDetectedFormat('Unknown')
+    setDetectionConfidence(0)
+    setHeaderRowIndex(null)
+  }
+}
 
   function loadSampleData() {
     setFileName('Tally_ERP_Profitability_Master_Q2.xlsx')
@@ -123,24 +691,95 @@ export function TallyImportModule() {
     setCurrentStep(2)
   }
 
-  function startBatchImport() {
-    setCurrentStep(6)
-    setIsProcessing(true)
+  async function startBatchImport() {
+  if (!uploadedRows.length) {
+    toast.error('No records available for import')
+    return
+  }
+
+  setCurrentStep(6)
+  setIsProcessing(true)
+  setImportProgress(10)
+  setImportResult(null)
+  setImportJobId(null)
+
+  try {
+    setImportProgress(25)
+
+    const mapping: Record<string, string> = {}
+
+    mappings.forEach((item) => {
+      mapping[item.dronaField] =
+        item.tallyField
+    })
+
+    setImportProgress(40)
+
+    const result = await fetchJson<{
+      message: string
+      job: {
+        id: string
+        status: string
+        totalRows: number
+        successfulRows: number
+        failedRows: number
+      }
+      reconciliation: {
+        totalSourceRows: number
+        totalImportedRows: number
+        failedRows: number
+        difference: number
+        status: string
+      }
+    }>('/api/import/pipeline', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fileName:
+          fileName ||
+          'Imported_Logistics_MIS.xlsx',
+
+        fileType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+
+        sourceType: 'EXCEL',
+
+        rawRows: uploadedRows,
+
+        mapping,
+      }),
+    })
+
+    setImportProgress(100)
+
+    setImportJobId(result.job.id)
+
+    setImportResult({
+      successfulRows:
+        result.job.successfulRows,
+      failedRows:
+        result.job.failedRows,
+    })
+
+    setIsProcessing(false)
+
+    toast.success(
+      `Imported ${result.job.successfulRows} MIS records into PostgreSQL`
+    )
+
+    setCurrentStep(7)
+  } catch (error: any) {
+    setIsProcessing(false)
     setImportProgress(0)
 
-    const interval = setInterval(() => {
-      setImportProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval)
-          setIsProcessing(false)
-          setCurrentStep(7)
-          toast.success('Tally Import Completed & Reconciled!')
-          return 100
-        }
-        return prev + 25
-      })
-    }, 400)
+    toast.error(
+      error?.message ||
+        'Failed to import MIS data'
+    )
   }
+}
 
   return (
     <div className="space-y-6">
@@ -258,21 +897,78 @@ export function TallyImportModule() {
               <h3 className="text-base font-bold text-[#0B2148]">Step 2: Auto-Identify Sheets & Data Types</h3>
               <p className="text-xs text-slate-500">File: <span className="font-semibold text-slate-800">{fileName}</span> ({fileSize})</p>
             </div>
-            <Badge className="bg-emerald-100 text-emerald-800 font-bold text-xs">Detection 100% Match</Badge>
+            <Badge
+              className={
+                detectionConfidence >= 70
+                  ? 'bg-emerald-100 text-emerald-800 font-bold text-xs'
+                  : 'bg-amber-100 text-amber-800 font-bold text-xs'
+              }
+            >
+              Detection {detectionConfidence}% Match
+            </Badge>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
             <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
-              <div className="font-bold text-[#0B2148] mb-1">Identified Format</div>
-              <div className="text-slate-600">Tally Prime XML/Excel Voucher Export</div>
+              <div className="font-bold text-[#0B2148] mb-1">
+                Identified Format
+              </div>
+              <div className="text-slate-600 font-medium">
+                {detectedFormat}
+              </div>
             </div>
+
             <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
-              <div className="font-bold text-[#0B2148] mb-1">Detected Sheet</div>
-              <div className="text-slate-600">{detectedSheet}</div>
+              <div className="font-bold text-[#0B2148] mb-1">
+                Detected Sheet
+              </div>
+              <div className="text-slate-600">
+                {detectedSheet || sheetName || '—'}
+              </div>
+
+              {headerRowIndex !== null && (
+                <div className="text-[11px] text-slate-400 mt-1">
+                  Header row: {headerRowIndex + 1}
+                </div>
+              )}
             </div>
+
             <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
-              <div className="font-bold text-[#0B2148] mb-1">Total Row Count</div>
-              <div className="text-slate-600 font-bold text-emerald-600">18,366 Voucher Records</div>
+              <div className="font-bold text-[#0B2148] mb-1">
+                Total Records
+              </div>
+              <div className="text-slate-600 font-bold text-emerald-600">
+                {uploadedRows.length.toLocaleString()} Records
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="font-bold text-[#0B2148]">
+                  Detected Columns
+                </div>
+
+                <div className="text-xs text-slate-500">
+                  {uploadedHeaders.length} columns detected from the uploaded file
+                </div>
+              </div>
+
+              <Badge className="bg-blue-50 text-blue-700 border border-blue-200">
+                {uploadedHeaders.length} Columns
+              </Badge>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {uploadedHeaders.map((header) => (
+                <span
+                  key={header}
+                  className="px-2.5 py-1 rounded-md bg-slate-50 border border-slate-200 text-[11px] text-slate-700"
+                >
+                  {header}
+                </span>
+              ))}
             </div>
           </div>
 
@@ -290,17 +986,24 @@ export function TallyImportModule() {
         <Card className="border border-slate-200/80 shadow-sm bg-white rounded-2xl p-6 space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div>
-              <h3 className="text-base font-bold text-[#0B2148]">Step 3: Auto Field Mapping</h3>
-              <p className="text-xs text-slate-500">Map source Tally columns to Drona Database schemas.</p>
+              <h3 className="text-base font-bold text-[#0B2148]">
+                Step 3: Auto Field Mapping
+              </h3>
+
+              <p className="text-xs text-slate-500">
+                Map detected MIS columns to Drona logistics fields.
+              </p>
             </div>
-            <Badge className="bg-[#08B6D8]/20 text-[#0B2148] font-bold text-xs">7 / 7 Fields Mapped</Badge>
+           <Badge className="bg-[#08B6D8]/20 text-[#0B2148] font-bold text-xs">
+              {mappings.length} / {uploadedHeaders.length} Fields Mapped
+            </Badge>
           </div>
 
           <div className="overflow-x-auto scroll-thin">
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-slate-50 text-left text-[11px] font-bold uppercase text-slate-500 border-b border-slate-200">
-                  <th className="py-2.5 px-3">Tally Column Name</th>
+                  <th className="py-2.5 px-3">MIS Column Name</th>
                   <th className="py-2.5 px-3">Target Entity</th>
                   <th className="py-2.5 px-3">Drona Field Target</th>
                   <th className="py-2.5 px-3">Sample Value</th>
@@ -325,8 +1028,17 @@ export function TallyImportModule() {
 
           <div className="flex justify-end gap-3 pt-2">
             <Button onClick={() => setCurrentStep(2)} variant="outline" size="sm">Back</Button>
-            <Button onClick={() => setCurrentStep(4)} size="sm" className="bg-[#0B2148] text-white">
-              Run Validation Engine <ArrowRight className="h-4 w-4 ml-1.5" />
+            <Button
+              onClick={() => {
+                const results = validateLogisticsRows(uploadedRows)
+                setValidationResults(results)
+                setCurrentStep(4)
+              }}
+              size="sm"
+              className="bg-[#0B2148] text-white"
+            >
+              Run Validation Engine
+              <ArrowRight className="h-4 w-4 ml-1.5" />
             </Button>
           </div>
         </Card>
@@ -338,22 +1050,34 @@ export function TallyImportModule() {
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div>
               <h3 className="text-base font-bold text-[#0B2148]">Step 4: Error & Duplicate Detection</h3>
-              <p className="text-xs text-slate-500">Scanning 18,366 records for schema compliance.</p>
+              <p className="text-xs text-slate-500">Scanning {uploadedRows.length.toLocaleString()} MIS records for schema compliance.</p>
             </div>
-            <Badge className="bg-emerald-100 text-emerald-800 font-bold text-xs">Validation Passed</Badge>
+            <Badge
+              className={
+                validationResults.attention > 0 ||
+                validationResults.duplicates > 0
+                  ? 'bg-amber-100 text-amber-800 font-bold text-xs'
+                  : 'bg-emerald-100 text-emerald-800 font-bold text-xs'
+              }
+            >
+              {validationResults.attention > 0 ||
+              validationResults.duplicates > 0
+                ? 'Validation Completed with Issues'
+                : 'Validation Passed'}
+            </Badge>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
             <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50">
-              <div className="font-bold text-emerald-800 text-lg">18,312</div>
+              <div className="font-bold text-emerald-800 text-lg">{validationResults.valid}</div>
               <div className="text-emerald-700">Valid Records Ready for Import</div>
             </div>
             <div className="p-4 rounded-xl border border-amber-200 bg-amber-50">
-              <div className="font-bold text-amber-800 text-lg">31</div>
-              <div className="text-amber-700">Duplicate Vouchers Identified</div>
+              <div className="font-bold text-amber-800 text-lg">{validationResults.duplicates}</div>
+              <div className="text-amber-700">Duplicate Records Identified</div>
             </div>
             <div className="p-4 rounded-xl border border-rose-200 bg-rose-50">
-              <div className="font-bold text-rose-800 text-lg">23</div>
+              <div className="font-bold text-rose-800 text-lg">{validationResults.attention}</div>
               <div className="text-rose-700">Records Require Attention</div>
             </div>
           </div>
@@ -367,63 +1091,278 @@ export function TallyImportModule() {
         </Card>
       )}
 
-      {/* STEP 5: Preview (Pre-Upload Database Mapping Preview) */}
+      {/* STEP 5: Preview */}
       {currentStep === 5 && (
         <Card className="border border-slate-200/80 shadow-sm bg-white rounded-2xl p-6 space-y-6">
+
+          {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div>
-              <h3 className="text-base font-bold text-[#0B2148]">Step 5: Pre-Upload Database Mapping Preview</h3>
-              <p className="text-xs text-slate-500">Preview exact Tally → Database schema mapping before pushing to SQLite database.</p>
+              <h3 className="text-base font-bold text-[#0B2148]">
+                Step 5: Database Import Preview
+              </h3>
+
+              <p className="text-xs text-slate-500">
+                Review the actual MIS records before importing them into PostgreSQL.
+              </p>
             </div>
-            <Badge className="bg-[#0B2148] text-white font-bold text-xs">Pre-Commit Sandbox</Badge>
+
+            <Badge className="bg-[#0B2148] text-white font-bold text-xs">
+              Pre-Commit Preview
+            </Badge>
           </div>
 
-          <div className="overflow-x-auto scroll-thin">
+          {/* Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+
+            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+              <div className="text-[11px] text-slate-500">
+                File
+              </div>
+
+              <div className="text-sm font-bold text-[#0B2148] truncate">
+                {fileName || '—'}
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+              <div className="text-[11px] text-slate-500">
+                Records
+              </div>
+
+              <div className="text-sm font-bold text-[#0B2148]">
+                {uploadedRows.length}
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50">
+              <div className="text-[11px] text-emerald-700">
+                Valid
+              </div>
+
+              <div className="text-sm font-bold text-emerald-800">
+                {validationResults.valid}
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+              <div className="text-[11px] text-slate-500">
+                Target Database
+              </div>
+
+              <div className="text-sm font-bold text-[#0B2148]">
+                PostgreSQL
+              </div>
+            </div>
+
+          </div>
+
+          {/* Actual MIS Preview */}
+          <div className="overflow-x-auto scroll-thin border border-slate-200 rounded-xl">
+
             <table className="w-full text-xs">
+
               <thead>
                 <tr className="bg-slate-50 text-left text-[11px] font-bold uppercase text-slate-500 border-b border-slate-200">
-                  <th className="py-2.5 px-3">Voucher Date</th>
-                  <th className="py-2.5 px-3">Tally Voucher ID</th>
-                  <th className="py-2.5 px-3">Party Ledger Name</th>
-                  <th className="py-2.5 px-3">Target Entity</th>
-                  <th className="py-2.5 px-3">Mapped DB Column</th>
-                  <th className="py-2.5 px-3 text-right">Debit (₹)</th>
-                  <th className="py-2.5 px-3 text-right">Credit (₹)</th>
-                  <th className="py-2.5 px-3 text-center">Status</th>
+
+                  <th className="py-2.5 px-3">
+                    Invoice No.
+                  </th>
+
+                  <th className="py-2.5 px-3">
+                    Party
+                  </th>
+
+                  <th className="py-2.5 px-3">
+                    Route
+                  </th>
+
+                  <th className="py-2.5 px-3">
+                    LR No.
+                  </th>
+
+                  <th className="py-2.5 px-3">
+                    Vehicle
+                  </th>
+
+                  <th className="py-2.5 px-3">
+                    Vendor / Transporter
+                  </th>
+
+                  <th className="py-2.5 px-3 text-right">
+                    Vehicle Rate
+                  </th>
+
+                  <th className="py-2.5 px-3 text-center">
+                    Status
+                  </th>
+
                 </tr>
               </thead>
+
               <tbody className="divide-y divide-slate-100">
-                {SAMPLE_PREVIEW_ROWS.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50">
-                    <td className="py-2.5 px-3 font-semibold text-slate-600">{row.vDate}</td>
-                    <td className="py-2.5 px-3 font-mono font-bold text-[#0B2148]">{row.tallyVoucher}</td>
-                    <td className="py-2.5 px-3 font-medium text-slate-800">{row.partyLedger}</td>
-                    <td className="py-2.5 px-3">
-                      <Badge className="bg-slate-100 text-slate-800 text-[10px] font-bold">{row.targetEntity}</Badge>
-                    </td>
-                    <td className="py-2.5 px-3 font-mono text-[#08B6D8] font-bold">{row.targetDbColumn}</td>
-                    <td className="py-2.5 px-3 text-right font-bold text-emerald-600">{formatINR(row.debit)}</td>
-                    <td className="py-2.5 px-3 text-right font-bold text-rose-600">{formatINR(row.credit)}</td>
-                    <td className="py-2.5 px-3 text-center">
-                      <Badge className={`text-[10px] font-bold ${
-                        row.status === 'VALID' ? 'bg-emerald-100 text-emerald-800' :
-                        row.status === 'DUPLICATE' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
-                      }`}>
-                        {row.status}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
+
+                {uploadedRows.map((row, index) => {
+
+                  const status = getLogisticsPreviewStatus(
+                    row,
+                    index,
+                    uploadedRows
+                  )
+
+                  const invoiceNumber =
+                    String(row['INVOICE NUMBER'] ?? '').trim()
+
+                  const partyName =
+                    String(row['PARTY NAME'] ?? '').trim()
+
+                  const pickupLocation =
+                    String(row['PICKUP LOCATION'] ?? '').trim()
+
+                  const destination =
+                    String(row['DESTINATION'] ?? '').trim()
+
+                  const lrNumber =
+                    String(row['LR. NO.'] ?? '').trim()
+
+                  const vehicleNumber =
+                    String(row['VEHICLE NUMBER'] ?? '').trim()
+
+                  const vendorName =
+                    String(row['VENDOR NAME'] ?? '').trim()
+
+                  const transporterName =
+                    String(row['TRANSPOTER NAME'] ?? '').trim()
+
+                  const vehicleRate =
+                    String(row['VEHICLE RATE'] ?? '').trim()
+
+                  return (
+                    <tr
+                      key={`${invoiceNumber}-${lrNumber}-${index}`}
+                      className="hover:bg-slate-50"
+                    >
+
+                      {/* Invoice */}
+                      <td className="py-3 px-3 font-mono font-bold text-[#0B2148]">
+                        {invoiceNumber || '—'}
+                      </td>
+
+                      {/* Party */}
+                      <td className="py-3 px-3 font-medium text-slate-800">
+                        {partyName || '—'}
+                      </td>
+
+                      {/* Route */}
+                      <td className="py-3 px-3">
+                        <div className="font-medium text-slate-800">
+                          {pickupLocation || '—'}
+                        </div>
+
+                        <div className="text-[10px] text-slate-400">
+                          ↓ {destination || '—'}
+                        </div>
+                      </td>
+
+                      {/* LR */}
+                      <td className="py-3 px-3 font-mono text-slate-700">
+                        {lrNumber || '—'}
+                      </td>
+
+                      {/* Vehicle */}
+                      <td className="py-3 px-3">
+                        <div className="font-medium text-slate-800">
+                          {vehicleNumber || '—'}
+                        </div>
+
+                        {row['VEHICLE TYPE'] && (
+                          <div className="text-[10px] text-slate-400">
+                            {String(row['VEHICLE TYPE'])}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Vendor */}
+                      <td className="py-3 px-3">
+                        <div className="font-medium text-slate-800">
+                          {vendorName || '—'}
+                        </div>
+
+                        {transporterName &&
+                          transporterName !== vendorName && (
+                            <div className="text-[10px] text-slate-400">
+                              {transporterName}
+                            </div>
+                          )}
+                      </td>
+
+                      {/* Rate */}
+                      <td className="py-3 px-3 text-right font-bold text-slate-800">
+                        {vehicleRate
+                          ? `₹${vehicleRate}`
+                          : '—'}
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-3 px-3 text-center">
+
+                        <Badge
+                          className={`text-[10px] font-bold ${
+                            status === 'VALID'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : status === 'DUPLICATE'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}
+                        >
+                          {status}
+                        </Badge>
+
+                      </td>
+
+                    </tr>
+                  )
+                })}
+
               </tbody>
+
             </table>
+
           </div>
 
+          {/* Empty state */}
+          {uploadedRows.length === 0 && (
+            <div className="text-center py-10 text-sm text-slate-500">
+              No records available for preview.
+            </div>
+          )}
+
+          {/* Buttons */}
           <div className="flex justify-end gap-3 pt-2">
-            <Button onClick={() => setCurrentStep(4)} variant="outline" size="sm">Back</Button>
-            <Button onClick={startBatchImport} size="sm" className="bg-[#0B2148] text-white">
-              Execute Batch Import <ArrowRight className="h-4 w-4 ml-1.5" />
+
+            <Button
+              onClick={() => setCurrentStep(4)}
+              variant="outline"
+              size="sm"
+            >
+              Back
             </Button>
+
+            <Button
+              onClick={startBatchImport}
+              disabled={
+                uploadedRows.length === 0 ||
+                validationResults.valid === 0
+              }
+              size="sm"
+              className="bg-[#0B2148] text-white"
+            >
+              Execute Batch Import
+              <ArrowRight className="h-4 w-4 ml-1.5" />
+            </Button>
+
           </div>
+
         </Card>
       )}
 
@@ -433,9 +1372,25 @@ export function TallyImportModule() {
           <div className="max-w-md mx-auto space-y-4">
             <RefreshCw className="h-12 w-12 text-[#08B6D8] animate-spin mx-auto" />
             <h3 className="text-lg font-bold text-[#0B2148]">Processing Batch Import to Database</h3>
-            <p className="text-xs text-slate-500">Writing 18,366 validated Tally records to SQLite Database in batch chunks.</p>
+            <p className="text-xs text-slate-500">
+              Importing {uploadedRows.length.toLocaleString()} validated MIS records into PostgreSQL.
+            </p>
             <Progress value={importProgress} className="h-3 bg-slate-100" />
-            <div className="text-xs font-mono font-bold text-[#08B6D8]">{importProgress}% Complete</div>
+           <div className="space-y-1">
+            <div className="text-xs font-mono font-bold text-[#08B6D8]">
+              {importProgress}% Complete
+            </div>
+
+            <div className="text-[11px] text-slate-400">
+              {importProgress < 40
+                ? 'Preparing import...'
+                : importProgress < 70
+                ? 'Writing records to PostgreSQL...'
+                : importProgress < 100
+                ? 'Finalizing import and reconciliation...'
+                : 'Import completed'}
+            </div>
+          </div>
           </div>
         </Card>
       )}
@@ -536,50 +1491,141 @@ export function TallyImportModule() {
       )}
 
       {/* STEP 8: History */}
-      {currentStep === 8 && (
-        <Card className="border border-slate-200/80 shadow-sm bg-white rounded-2xl p-6 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h3 className="text-base font-bold text-[#0B2148]">Tally Import Audit History</h3>
-              <p className="text-xs text-slate-500">Historical record of all synchronized Tally Excel datasets.</p>
-            </div>
-            <Button onClick={() => setCurrentStep(1)} size="sm" className="bg-[#0B2148] text-white gap-1.5 text-xs">
-              + Import New Tally Dataset
-            </Button>
-          </div>
+{currentStep === 8 && (
+  <Card className="border border-slate-200/80 shadow-sm bg-white rounded-2xl p-6 space-y-4">
+    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      <div>
+        <h3 className="text-base font-bold text-[#0B2148]">
+          Tally Import Audit History
+        </h3>
 
-          <div className="overflow-x-auto scroll-thin">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-slate-50 text-left text-[11px] font-bold uppercase text-slate-500 border-b border-slate-200">
-                  <th className="py-2.5 px-3">Batch ID</th>
-                  <th className="py-2.5 px-3">File Name</th>
-                  <th className="py-2.5 px-3">Import Date</th>
-                  <th className="py-2.5 px-3">User</th>
-                  <th className="py-2.5 px-3 text-right">Records</th>
-                  <th className="py-2.5 px-3 text-right">Total Debit</th>
-                  <th className="py-2.5 px-3 text-center">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {history.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50">
-                    <td className="py-2.5 px-3 font-mono font-bold text-[#0B2148]">{item.id}</td>
-                    <td className="py-2.5 px-3 font-medium text-slate-800">{item.fileName}</td>
-                    <td className="py-2.5 px-3 text-slate-500">{item.importedAt}</td>
-                    <td className="py-2.5 px-3 text-slate-700">{item.importedBy}</td>
-                    <td className="py-2.5 px-3 text-right font-bold text-[#0B2148]">{item.records.toLocaleString()}</td>
-                    <td className="py-2.5 px-3 text-right font-bold text-emerald-600">{formatINR(item.totalDebit)}</td>
-                    <td className="py-2.5 px-3 text-center">
-                      <Badge className="bg-emerald-100 text-emerald-800 text-[10px] font-bold">SUCCESS</Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
+        <p className="text-xs text-slate-500">
+          Historical record of all synchronized Tally Excel datasets.
+        </p>
+      </div>
+
+      <Button
+        onClick={() => setCurrentStep(1)}
+        size="sm"
+        className="bg-[#0B2148] text-white gap-1.5 text-xs"
+      >
+        + Import New Tally Dataset
+      </Button>
+    </div>
+
+    <div className="overflow-x-auto scroll-thin">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-slate-50 text-left text-[11px] font-bold uppercase text-slate-500 border-b border-slate-200">
+            <th className="py-2.5 px-3">
+              Batch ID
+            </th>
+
+            <th className="py-2.5 px-3">
+              File Name
+            </th>
+
+            <th className="py-2.5 px-3">
+              Import Date
+            </th>
+
+            <th className="py-2.5 px-3">
+              User
+            </th>
+
+            <th className="py-2.5 px-3 text-right">
+              Records
+            </th>
+
+            <th className="py-2.5 px-3 text-right">
+              Total Debit
+            </th>
+
+            <th className="py-2.5 px-3 text-center">
+              Status
+            </th>
+          </tr>
+        </thead>
+
+        <tbody className="divide-y divide-slate-100">
+          {historyLoading ? (
+            <tr>
+              <td
+                colSpan={7}
+                className="py-8 text-center text-slate-500"
+              >
+                Loading import history...
+              </td>
+            </tr>
+          ) : history.length === 0 ? (
+            <tr>
+              <td
+                colSpan={7}
+                className="py-8 text-center text-slate-500"
+              >
+                No import history found.
+              </td>
+            </tr>
+          ) : (
+            history.map((item) => (
+              <tr
+                key={item.id}
+                className="hover:bg-slate-50"
+              >
+                {/* Batch ID */}
+                <td className="py-2.5 px-3 font-mono font-bold text-[#0B2148]">
+                  {item.id}
+                </td>
+
+                {/* File Name */}
+                <td className="py-2.5 px-3 font-medium text-slate-800">
+                  {item.fileName}
+                </td>
+
+                {/* Import Date */}
+                <td className="py-2.5 px-3 text-slate-500">
+                  {item.importedAt}
+                </td>
+
+                {/* User */}
+                <td className="py-2.5 px-3 text-slate-700">
+                  {item.importedBy}
+                </td>
+
+                {/* Records */}
+                <td className="py-2.5 px-3 text-right font-bold text-[#0B2148]">
+                  {item.records.toLocaleString()}
+                </td>
+
+                {/* Total Debit */}
+                <td className="py-2.5 px-3 text-right font-bold text-emerald-600">
+                  {formatINR(item.totalDebit)}
+                </td>
+
+                {/* Status */}
+                <td className="py-2.5 px-3 text-center">
+                  <Badge
+                    className={
+                      item.status === 'COMPLETED'
+                        ? 'bg-emerald-100 text-emerald-800 text-[10px] font-bold'
+                        : item.status === 'PARTIAL'
+                        ? 'bg-amber-100 text-amber-800 text-[10px] font-bold'
+                        : item.status === 'FAILED'
+                        ? 'bg-red-100 text-red-800 text-[10px] font-bold'
+                        : 'bg-slate-100 text-slate-700 text-[10px] font-bold'
+                    }
+                  >
+                    {item.status}
+                  </Badge>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  </Card>
+)}
     </div>
   )
 }
